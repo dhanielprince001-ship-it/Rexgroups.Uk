@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, ShieldCheck, Clock3, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 
@@ -14,13 +14,13 @@ function Header() {
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState(null);
   const location = useLocation();
+  useEffect(() => { setOpen(false); }, [location.pathname]);
   useEffect(() => {
-    setOpen(false);
     if (!supabase) return;
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => listener.subscription.unsubscribe();
-  }, [location.pathname]);
+  }, []);
   const nav = [['Home','/'],['Services','/services'],['About','/about'],['Contact','/contact']];
   return <header className="site-header">
     <div className="container nav-wrap">
@@ -50,7 +50,8 @@ function Footer() {
 }
 
 function Layout({ children }) {
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [children]);
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [pathname]);
   return <><Header/><main>{children}</main><Footer/><WhatsApp/></>;
 }
 
@@ -111,7 +112,7 @@ function Contact() {
     if (supabase) {
       const { error } = await supabase.from('enquiries').insert([{name:form.name,email:form.email,service:form.service,message:form.message}]);
       if (error) setStatus('We could not save this enquiry. Please use email or WhatsApp below.');
-      else setStatus('Thanks! Your enquiry has been sent to our team.');
+      else { setStatus('Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); }
     } else {
       const subject = encodeURIComponent(`Rex Groups enquiry: ${form.service}`);
       const body = encodeURIComponent(`Name: ${form.name}\nEmail: ${form.email}\nService: ${form.service}\n\n${form.message}`);
@@ -165,7 +166,7 @@ function Dashboard() {
     });
   }, [navigate]);
   async function logout() { if (supabase) await supabase.auth.signOut(); navigate('/'); }
-  if (!backendReady) return <Layout><section className="dashboard-section container"><div className="notice-card"><AlertCircle/><h1>Dashboard setup needed</h1><p>{error}</p><Link className="button" to="/contact">Use contact form for now</Link></div></section></Layout>;
+  if (!backendReady) return <Layout><section className="dashboard-section container"><div className="notice-card"><AlertCircle/><h1>Dashboard setup needed</h1><p>{error || 'Connect Supabase to enable accounts, stored enquiries and the admin dashboard.'}</p><Link className="button" to="/contact">Use contact form for now</Link></div></section></Layout>;
   if (!session) return <Layout><section className="dashboard-section container"><div className="notice-card"><h1>Loading your account…</h1><p>{error}</p></div></section></Layout>;
   return <Layout><section className="dashboard-section container"><div className="dashboard-head"><div><p className="eyebrow">Your account</p><h1>Hello{profile?.full_name?`, ${profile.full_name}`:''}.</h1><p>Welcome to your Rex Groups account area.</p></div><button className="button button-outline-dark" onClick={logout}><LogOut size={16}/> Sign out</button></div>{profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}</section></Layout>;
 }
