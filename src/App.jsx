@@ -271,7 +271,7 @@ function Dashboard() {
       window.dispatchEvent(new Event('profile-updated'));
       setNotice('Profile picture updated.');
     } catch (err) {
-            console.error(err);
+                  console.error(err);
       setError('Upload failed: ' + (err?.message || 'unknown error'));
     } finally { setUploading(false); }
   }
