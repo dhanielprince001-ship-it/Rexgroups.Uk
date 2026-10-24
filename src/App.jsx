@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, ShieldCheck, Clock3, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 
@@ -10,17 +10,72 @@ function WhatsApp() {
   return <a className="whatsapp-float" href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent('Hello Rex Groups, I would like to make an enquiry.')}`} target="_blank" rel="noreferrer" aria-label="Chat with Rex Groups on WhatsApp">WA</a>;
 }
 
-function Header() {
-  const [open, setOpen] = useState(false);
+function displayNameOf(session, profile) {
+  const meta = session?.user?.user_metadata?.full_name;
+  return (profile?.full_name || meta || session?.user?.email?.split('@')[0] || '').trim();
+}
+
+// Shared sign-in state: the session, the user's profile row (name, picture, admin flag).
+function useAuth() {
   const [session, setSession] = useState(null);
-  const location = useLocation();
-  useEffect(() => { setOpen(false); }, [location.pathname]);
+  const [profile, setProfile] = useState(null);
+  const [ready, setReady] = useState(!supabase);
+
+  const loadProfile = useCallback(async (s) => {
+    if (!supabase || !s) { setProfile(null); return; }
+    const { data } = await supabase.from('profiles').select('full_name,avatar_url,is_admin').eq('id', s.user.id).maybeSingle();
+    setProfile(data || null);
+  }, []);
+
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => listener.subscription.unsubscribe();
-  }, []);
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session); setReady(true); loadProfile(data.session);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setTimeout(() => loadProfile(s), 0);
+    });
+    const refresh = () => supabase.auth.getSession().then(({ data }) => loadProfile(data.session));
+    window.addEventListener('profile-updated', refresh);
+    return () => { active = false; listener.subscription.unsubscribe(); window.removeEventListener('profile-updated', refresh); };
+  }, [loadProfile]);
+
+  return { session, profile, ready };
+}
+
+function Avatar({ url, name, size = 36 }) {
+  const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  return <span className="avatar" style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}>{url ? <img src={url} alt="" /> : initial}</span>;
+}
+
+// Centre-crops to a square and shrinks, so phone photos upload quickly and stay small.
+function resizeImage(file, max = 512) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(src);
+      const side = Math.min(img.width, img.height);
+      const out = Math.min(max, side);
+      const canvas = document.createElement('canvas');
+      canvas.width = out; canvas.height = out;
+      canvas.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, out, out);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not process image')), 'image/jpeg', 0.88);
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('Could not read image')); };
+    img.src = src;
+  });
+}
+
+function Header() {
+  const [open, setOpen] = useState(false);
+  const { session, profile } = useAuth();
+  const location = useLocation();
+  useEffect(() => { setOpen(false); }, [location.pathname]);
+  const name = displayNameOf(session, profile);
   const nav = [['Home','/'],['Services','/services'],['About','/about'],['Contact','/contact']];
   return <header className="site-header">
     <div className="container nav-wrap">
@@ -29,8 +84,12 @@ function Header() {
       <nav className={open ? 'main-nav open' : 'main-nav'}>
         {nav.map(([label,path]) => <NavLink key={path} to={path} end={path === '/'}>{label}</NavLink>)}
         <div className="nav-actions">
-          {session ? <Link className="nav-login" to="/dashboard"><LayoutDashboard size={16}/> Dashboard</Link> : <Link className="nav-login" to="/login">Login</Link>}
-          <Link className="button button-small" to="/register">Get started <ArrowUpRight size={15}/></Link>
+          {session
+            ? <Link className="nav-user" to="/dashboard" aria-label="Open my account"><Avatar url={profile?.avatar_url} name={name} size={34}/><span>{name}</span></Link>
+            : <>
+                <Link className="nav-login" to="/login">Login</Link>
+                <Link className="button button-small" to="/register">Get started <ArrowUpRight size={15}/></Link>
+              </>}
         </div>
       </nav>
     </div>
@@ -51,7 +110,7 @@ function Footer() {
 
 function Layout({ children }) {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }, [pathname]);
+  useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [pathname]);
   return <><Header/><main>{children}</main><Footer/><WhatsApp/></>;
 }
 
@@ -110,8 +169,8 @@ function Contact() {
   async function submit(e) {
     e.preventDefault(); setBusy(true); setStatus('');
     if (supabase) {
-      const { error } = await supabase.from('enquiries').insert([{name:form.name,email:form.email,service:form.service,message:form.message}]);
-      if (error) setStatus('We could not save this enquiry. Please use email or WhatsApp below.');
+      const { error } = await supabase.from('enquiries').insert([{name:form.name.trim(),email:form.email.trim(),service:form.service,message:form.message.trim()}]);
+      if (error) setStatus('We could not save this enquiry. Please use email or WhatsApp instead.');
       else { setStatus('Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); }
     } else {
       const subject = encodeURIComponent(`Rex Groups enquiry: ${form.service}`);
@@ -126,49 +185,132 @@ function Contact() {
 
 function AuthPage({ mode }) {
   const navigate = useNavigate();
+  const { session, profile } = useAuth();
   const [form, setForm] = useState({name:'',email:'',password:''});
   const [status,setStatus] = useState('');
   const [busy,setBusy] = useState(false);
   const signup = mode === 'register';
+  const name = displayNameOf(session, profile);
   async function submit(e) {
     e.preventDefault(); setStatus('');
     if (!supabase) { setStatus('Authentication is not connected yet. Follow SETUP.md to connect your free Supabase project.'); return; }
+    const fullName = form.name.trim();
+    if (signup && !fullName) { setStatus('Please enter your full name.'); return; }
     setBusy(true);
     const result = signup
-      ? await supabase.auth.signUp({email:form.email,password:form.password,options:{data:{full_name:form.name}}})
-      : await supabase.auth.signInWithPassword({email:form.email,password:form.password});
+      ? await supabase.auth.signUp({email:form.email.trim(),password:form.password,options:{data:{full_name:fullName}}})
+      : await supabase.auth.signInWithPassword({email:form.email.trim(),password:form.password});
     setBusy(false);
     if (result.error) setStatus(result.error.message);
-    else if (signup) setStatus('Account created. Check your email if confirmation is enabled, then log in.');
+    else if (signup && !result.data.session) setStatus('Account created. Check your email to confirm it, then log in.');
     else navigate('/dashboard');
   }
-  return <Layout><section className="auth-section"><div className="auth-picture"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85" alt="Scenic travel destination"/><div><p className="eyebrow light-eyebrow">Rex Groups</p><h2>Your next step<br/><em>starts here.</em></h2><p>Manage your enquiries and stay connected with our services.</p></div></div><div className="auth-panel"><div className="auth-form-wrap"><span className="icon-tile auth-icon"><UserRound/></span><p className="eyebrow">{signup?'Join Rex Groups':'Welcome back'}</p><h1>{signup?'Create your account':'Sign in'}</h1><p className="muted">{signup?'Create an account to get started.':'Sign in to view your account area.'}</p><form onSubmit={submit}>{signup && <label>Full name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Your full name"/></label>}<label>Email address<input type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label><label>Password<input type="password" minLength="8" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="At least 8 characters"/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Please wait…':signup?'Create account':'Login'} <ArrowUpRight size={17}/></button></form><p className="auth-switch">{signup?'Already have an account?':'New to Rex Groups?'} <Link to={signup?'/login':'/register'}>{signup?'Sign in':'Create an account'}</Link></p><small className="form-footnote">Use a unique password. Never share your password with anyone.</small></div></div></section></Layout>;
+  async function logout() { if (supabase) await supabase.auth.signOut(); }
+  return <Layout><section className="auth-section"><div className="auth-picture"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85" alt="Scenic travel destination"/><div><p className="eyebrow light-eyebrow">Rex Groups</p><h2>Your next step<br/><em>starts here.</em></h2><p>Manage your enquiries and stay connected with our services.</p></div></div><div className="auth-panel"><div className="auth-form-wrap">
+    {session ? <div className="signed-in">
+      <Avatar url={profile?.avatar_url} name={name} size={80}/>
+      <p className="eyebrow">Signed in as</p>
+      <h1>{name}</h1>
+      <p className="muted">{session.user.email}</p>
+      <Link className="button form-submit" to="/dashboard">Go to my account <ArrowUpRight size={17}/></Link>
+      <button type="button" className="button button-outline-dark form-submit" onClick={logout}><LogOut size={16}/> Sign out</button>
+    </div> : <>
+      <span className="icon-tile auth-icon"><UserRound/></span><p className="eyebrow">{signup?'Join Rex Groups':'Welcome back'}</p><h1>{signup?'Create your account':'Sign in'}</h1><p className="muted">{signup?'Create an account to get started.':'Sign in to view your account area.'}</p>
+      <form onSubmit={submit}>
+        {signup && <label>Full name<input required maxLength="120" autoComplete="name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Your full name"/></label>}
+        <label>Email address<input type="email" required autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label>
+        <label>Password<input type="password" minLength="8" required autoComplete={signup?'new-password':'current-password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="At least 8 characters"/></label>
+        {status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}
+        <button className="button form-submit" disabled={busy}>{busy?'Please wait…':signup?'Create account':'Login'} <ArrowUpRight size={17}/></button>
+      </form>
+      <p className="auth-switch">{signup?'Already have an account?':'New to Rex Groups?'} <Link to={signup?'/login':'/register'}>{signup?'Sign in':'Create an account'}</Link></p>
+      <small className="form-footnote">Use a unique password. Never share your password with anyone.</small>
+    </>}
+  </div></div></section></Layout>;
 }
 
 function Dashboard() {
-  const [session,setSession] = useState(null);
-  const [profile,setProfile] = useState(null);
+  const { session, profile, ready } = useAuth();
   const [enquiries,setEnquiries] = useState([]);
   const [error,setError] = useState('');
+  const [notice,setNotice] = useState('');
+  const [uploading,setUploading] = useState(false);
+  const [nameDraft,setNameDraft] = useState('');
+  const fileRef = useRef(null);
   const navigate = useNavigate();
+  const name = displayNameOf(session, profile);
+  const needsName = Boolean(profile) && !profile.full_name?.trim();
+
+  useEffect(() => { if (supabase && ready && !session) navigate('/login'); }, [ready, session, navigate]);
+
   useEffect(() => {
-    if (!supabase) { setError('Connect Supabase to enable accounts, stored enquiries and the admin dashboard.'); return; }
-    supabase.auth.getSession().then(async ({data}) => {
-      if (!data.session) { navigate('/login'); return; }
-      setSession(data.session);
-      const {data: p} = await supabase.from('profiles').select('full_name,is_admin').eq('id',data.session.user.id).maybeSingle();
-      setProfile(p);
-      if (p?.is_admin) {
-        const {data: rows,error:e} = await supabase.from('enquiries').select('*').order('created_at',{ascending:false}).limit(50);
-        if (e) setError('Admin access is configured, but enquiries could not be loaded. Check the database policies.');
-        else setEnquiries(rows || []);
-      }
+    if (!supabase || !profile?.is_admin) return;
+    supabase.from('enquiries').select('*').order('created_at',{ascending:false}).limit(50).then(({data, error:e}) => {
+      if (e) setError('Admin access is configured, but enquiries could not be loaded. Check the database policies.');
+      else setEnquiries(data || []);
     });
-  }, [navigate]);
+  }, [profile?.is_admin]);
+
   async function logout() { if (supabase) await supabase.auth.signOut(); navigate('/'); }
-  if (!backendReady) return <Layout><section className="dashboard-section container"><div className="notice-card"><AlertCircle/><h1>Dashboard setup needed</h1><p>{error || 'Connect Supabase to enable accounts, stored enquiries and the admin dashboard.'}</p><Link className="button" to="/contact">Use contact form for now</Link></div></section></Layout>;
-  if (!session) return <Layout><section className="dashboard-section container"><div className="notice-card"><h1>Loading your account…</h1><p>{error}</p></div></section></Layout>;
-  return <Layout><section className="dashboard-section container"><div className="dashboard-head"><div><p className="eyebrow">Your account</p><h1>Hello{profile?.full_name?`, ${profile.full_name}`:''}.</h1><p>Welcome to your Rex Groups account area.</p></div><button className="button button-outline-dark" onClick={logout}><LogOut size={16}/> Sign out</button></div>{profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}</section></Layout>;
+
+  async function uploadAvatar(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(''); setNotice('');
+    if (!file.type.startsWith('image/')) { setError('Please choose an image file (JPG, PNG or WebP).'); return; }
+    setUploading(true);
+    try {
+      const blob = await resizeImage(file, 512);
+      const path = `${session.user.id}/avatar.jpg`;
+      const { error: upErr } = await supabase.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' });
+      if (upErr) throw upErr;
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { error: dbErr } = await supabase.from('profiles').update({ avatar_url: `${data.publicUrl}?v=${Date.now()}` }).eq('id', session.user.id);
+      if (dbErr) throw dbErr;
+      window.dispatchEvent(new Event('profile-updated'));
+      setNotice('Profile picture updated.');
+    } catch (err) {
+      setError('We could not upload your picture. Check that the latest supabase/schema.sql has been run, then try again.');
+    } finally { setUploading(false); }
+  }
+
+  async function saveName(e) {
+    e.preventDefault(); setError('');
+    const n = nameDraft.trim();
+    if (!n) return;
+    const { error: err } = await supabase.from('profiles').update({ full_name: n }).eq('id', session.user.id);
+    if (err) setError('We could not save your name. Please try again.');
+    else window.dispatchEvent(new Event('profile-updated'));
+  }
+
+  if (!backendReady) return <Layout><section className="dashboard-section container"><div className="notice-card"><AlertCircle/><h1>Dashboard setup needed</h1><p>Connect Supabase to enable accounts, stored enquiries and the admin dashboard.</p><Link className="button" to="/contact">Use contact form for now</Link></div></section></Layout>;
+  if (!session) return <Layout><section className="dashboard-section container"><div className="notice-card"><h1>Loading your account…</h1></div></section></Layout>;
+
+  return <Layout><section className="dashboard-section container">
+    <div className="dashboard-head">
+      <div className="profile-head">
+        <div className="avatar-wrap">
+          <Avatar url={profile?.avatar_url} name={name} size={96}/>
+          <button type="button" className="avatar-edit" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Change profile picture"><Camera size={16}/></button>
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={uploadAvatar}/>
+        </div>
+        <div>
+          <p className="eyebrow">Your account</p>
+          <h1>{needsName ? 'Welcome.' : `Hello, ${name}.`}</h1>
+          <p>{uploading ? 'Uploading your picture…' : 'Tap the camera to change your profile picture.'}</p>
+        </div>
+      </div>
+      <button className="button button-outline-dark" onClick={logout}><LogOut size={16}/> Sign out</button>
+    </div>
+    {notice && <p className="form-status form-ok"><CheckCircle2 size={16}/>{notice}</p>}
+    {error && <p className="form-status"><AlertCircle size={16}/>{error}</p>}
+    {needsName && <form className="name-form" onSubmit={saveName}>
+      <label>Please add your full name to continue<input required maxLength="120" autoComplete="name" value={nameDraft} onChange={e=>setNameDraft(e.target.value)} placeholder="Your full name"/></label>
+      <button className="button">Save name</button>
+    </form>}
+    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
+  </section></Layout>;
 }
 
 function NotFound() { return <Layout><section className="not-found container"><p className="eyebrow">404 · Page not found</p><h1>This page took<br/><em>a wrong turn.</em></h1><Link className="button" to="/">Back to home <ArrowRight size={16}/></Link></section></Layout>; }
