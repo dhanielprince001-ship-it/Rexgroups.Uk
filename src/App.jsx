@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp } from 'lucide-react';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 
@@ -103,7 +103,7 @@ function Header() {
   const location = useLocation();
   useEffect(() => { setOpen(false); }, [location.pathname]);
   const name = displayNameOf(session, profile);
-  const nav = [['Home','/'],['Services','/services'],['About','/about'],['Contact','/contact']];
+  const nav = [['Home','/'],['Services','/services'],['Track','/track'],['About','/about'],['Contact','/contact']];
   return <header className="site-header">
     <div className="container nav-wrap">
       <Link to="/" className="brand" aria-label="Rex Groups home"><span className="brand-mark">R<span>↗</span></span><span className="brand-copy"><b>REX</b><small>GROUPS</small></span></Link>
@@ -127,7 +127,7 @@ function Footer() {
   return <footer className="footer">
     <div className="container footer-grid">
       <div><Link to="/" className="brand footer-brand"><span className="brand-mark">R<span>↗</span></span><span className="brand-copy"><b>REX</b><small>GROUPS</small></span></Link><p>Logistics · Hospitality · Vacations</p><p className="muted">More than just services. We help you move, stay, dine and explore.</p></div>
-      <div><h4>Explore</h4><Link to="/">Home</Link><Link to="/services">Our services</Link><Link to="/about">About us</Link><Link to="/contact">Contact</Link></div>
+      <div><h4>Explore</h4><Link to="/">Home</Link><Link to="/services">Our services</Link><Link to="/track">Track a package</Link><Link to="/about">About us</Link><Link to="/contact">Contact</Link></div>
       <div><h4>Our services</h4><Link to="/logistics">Logistics</Link><Link to="/hospitality">Hotel & Restaurant</Link><Link to="/vacations">Vacations</Link></div>
       <div><h4>Get in touch</h4><a href={`mailto:${contact.email}`}><Mail size={15}/>{contact.email}</a><a href={`tel:${contact.phone}`}><Phone size={15}/>{contact.phone}</a><a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer">WhatsApp support <ArrowUpRight size={14}/></a></div>
     </div>
@@ -172,6 +172,7 @@ function Home() {
       <div className="hero-side-label">LOGISTICS · HOSPITALITY · VACATIONS</div>
     </section>
     <section className="trust-strip"><div className="container trust-items"><span><Truck/> Logistics support</span><span><Hotel/> Hospitality enquiries</span><span><Plane/> Vacation planning</span><span><ShieldCheck/> Customer-first service</span></div></section>
+    <TrackStrip/>
     <section className="section container">
       <div className="section-heading"><div><p className="eyebrow">What we do</p><h2>Different needs.<br/><em>One trusted team.</em></h2></div><p>Whether you are sending a package, arranging a stay or planning time away, start with the service that fits your needs.</p></div>
       <div className="service-grid">{services.map(s => <ServiceCard key={s.title} service={s}/>)}</div>
@@ -196,7 +197,7 @@ function PageHero({ eyebrow, title, image, description }) {
 function ServiceDetail({ type }) {
   const service = services.find(s => s.title === type) || services[0];
   const Icon = iconMap[service.icon] || Truck;
-  return <Layout><PageHero eyebrow={service.eyebrow} title={<>{service.title === 'Hotel & Restaurant' ? <>Stay well.<br/><em>Eat well.</em></> : service.title === 'Vacations' ? <>Make room for<br/><em>new memories.</em></> : <>Move with<br/><em>confidence.</em></>}</>} image={service.image} description={service.description}/><section className="section container detail-layout"><div className="detail-copy"><p className="eyebrow">How we can help</p><h2>Thoughtful support,<br/><em>from the first enquiry.</em></h2><p>{service.description} Contact our team to discuss your requirements, timelines and available options.</p><ul className="check-list">{service.bullets.map(b=><li key={b}><CheckCircle2 size={19}/>{b}</li>)}</ul><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button">Make an enquiry <ArrowUpRight size={17}/></Link></div><div className="detail-photo"><img src={service.image} alt={service.title}/><div className="photo-caption"><span className="icon-tile"><Icon/></span><div><b>{service.title}</b><small>Personal service, practical solutions</small></div></div></div></section><section className="mini-cta"><div className="container mini-cta-inner"><div><h2>Need help with {service.title.toLowerCase()}?</h2><p>Tell us a little about what you have in mind.</p></div><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button button-gold">Contact our team <ArrowRight size={16}/></Link></div></section></Layout>;
+  return <Layout><PageHero eyebrow={service.eyebrow} title={<>{service.title === 'Hotel & Restaurant' ? <>Stay well.<br/><em>Eat well.</em></> : service.title === 'Vacations' ? <>Make room for<br/><em>new memories.</em></> : <>Move with<br/><em>confidence.</em></>}</>} image={service.image} description={service.description}/><section className="section container detail-layout"><div className="detail-copy"><p className="eyebrow">How we can help</p><h2>Thoughtful support,<br/><em>from the first enquiry.</em></h2><p>{service.description} Contact our team to discuss your requirements, timelines and available options.</p><ul className="check-list">{service.bullets.map(b=><li key={b}><CheckCircle2 size={19}/>{b}</li>)}</ul><div className="detail-actions"><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button">Make an enquiry <ArrowUpRight size={17}/></Link>{service.title === 'Logistics' && <Link to="/track" className="button button-outline-dark"><Package size={16}/> Track a package</Link>}</div></div><div className="detail-photo"><img src={service.image} alt={service.title}/><div className="photo-caption"><span className="icon-tile"><Icon/></span><div><b>{service.title}</b><small>Personal service, practical solutions</small></div></div></div></section><section className="mini-cta"><div className="container mini-cta-inner"><div><h2>Need help with {service.title.toLowerCase()}?</h2><p>Tell us a little about what you have in mind.</p></div><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button button-gold">Contact our team <ArrowRight size={16}/></Link></div></section></Layout>;
 }
 
 function About() {
@@ -355,8 +356,140 @@ function Dashboard() {
       <label>Please add your full name to continue<input required maxLength="120" autoComplete="name" value={nameDraft} onChange={e=>setNameDraft(e.target.value)} placeholder="Your full name"/></label>
       <button className="button">Save name</button>
     </form>}
-    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
+    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
   </section></Layout>;
+}
+
+const STEPS = ['Order received', 'Picked up', 'In transit', 'Out for delivery', 'Delivered'];
+const STATUSES = [...STEPS, 'On hold'];
+
+function TrackStrip() {
+  const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  function go(e) {
+    e.preventDefault();
+    const c = code.trim();
+    navigate(c ? `/track?code=${encodeURIComponent(c)}` : '/track');
+  }
+  return <section className="track-strip"><div className="container track-strip-inner">
+    <div><b>Track your package</b><small>Enter the tracking code from Rex Groups</small></div>
+    <form onSubmit={go}><input value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. RX-1A2B3C4D" autoCapitalize="characters" autoComplete="off" aria-label="Tracking code"/><button className="button button-gold" type="submit">Track <ArrowRight size={16}/></button></form>
+  </div></section>;
+}
+
+function TrackPage() {
+  const [params] = useSearchParams();
+  const [code, setCode] = useState(params.get('code') || '');
+  const [result, setResult] = useState(null);
+  const [state, setState] = useState('idle');
+
+  async function lookup(value) {
+    const c = (value ?? code).trim();
+    if (!c) return;
+    if (!supabase) { setState('offline'); return; }
+    setState('loading'); setResult(null);
+    const { data, error } = await supabase.rpc('track_shipment', { p_code: c });
+    if (error) setState('error');
+    else if (!data) setState('missing');
+    else { setResult(data); setState('found'); }
+  }
+
+  useEffect(() => { const c = params.get('code'); if (c) lookup(c); }, []);
+
+  const onHold = result?.status === 'On hold';
+  const lastMoving = result ? result.events.find(e => e.status !== 'On hold')?.status : null;
+  const idx = result ? STEPS.indexOf(onHold ? lastMoving : result.status) : -1;
+  const delivered = result?.status === 'Delivered';
+
+  return <Layout>
+    <PageHero eyebrow="Track a package" title={<>Where is<br/><em>my package?</em></>} image={services[0].image} description="Enter the tracking code you were given by Rex Groups to see the latest update."/>
+    <section className="section container track-section">
+      <form className="track-form" onSubmit={e => { e.preventDefault(); lookup(); }}>
+        <label>Tracking code<input value={code} onChange={e => setCode(e.target.value)} placeholder="e.g. RX-1A2B3C4D" autoCapitalize="characters" autoComplete="off"/></label>
+        <button className="button" disabled={state === 'loading'}>{state === 'loading' ? 'Searching…' : 'Track'} <Search size={17}/></button>
+      </form>
+      {state === 'missing' && <p className="form-status"><AlertCircle size={16}/>We could not find that tracking code. Please check it and try again, or contact our team.</p>}
+      {state === 'error' && <p className="form-status"><AlertCircle size={16}/>Something went wrong while looking that up. Please try again in a moment.</p>}
+      {state === 'offline' && <p className="form-status"><AlertCircle size={16}/>Tracking is not connected yet. Please contact our team for an update.</p>}
+      {state === 'found' && result && <div className="track-card">
+        <div className="track-head">
+          <div><p className="eyebrow">Tracking code</p><h2>{result.tracking_code}</h2><p className="muted">{result.origin} → {result.destination}</p></div>
+          <span className={onHold ? 'status-badge hold' : delivered ? 'status-badge done' : 'status-badge'}>{result.status}</span>
+        </div>
+        <ol className="track-steps">{STEPS.map((step, i) => <li key={step} className={i <= idx ? 'done' : ''}>
+          <span className="dot">{i < idx || (i === idx && delivered) ? <CheckCircle2 size={16}/> : i + 1}</span><small>{step}</small>
+        </li>)}</ol>
+        {onHold && <p className="form-status"><AlertCircle size={16}/>This shipment is on hold. Please contact our team for details.</p>}
+        <h3>Updates</h3>
+        <ul className="track-events">{result.events.map((e, i) => <li key={i}>
+          <b>{e.status}</b>
+          {e.location && <span className="ev-loc"><MapPin size={13}/>{e.location}</span>}
+          {e.note && <p>{e.note}</p>}
+          <small>{new Date(e.created_at).toLocaleString()}</small>
+        </li>)}</ul>
+        <a className="text-link" href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent(`Hello Rex Groups, I have a question about shipment ${result.tracking_code}.`)}`} target="_blank" rel="noreferrer">Questions about this shipment? Message us <ArrowRight size={16}/></a>
+      </div>}
+    </section>
+  </Layout>;
+}
+
+function AdminShipments() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ origin: '', destination: '', receiver: '', description: '' });
+  const [editId, setEditId] = useState(null);
+  const [upd, setUpd] = useState({ status: 'In transit', location: '', note: '' });
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false }).limit(50);
+    if (error) setErr('Could not load shipments. Check that the package tracking SQL has been run in Supabase.');
+    else setRows(data || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function create(e) {
+    e.preventDefault(); setErr(''); setMsg(''); setBusy(true);
+    const { data, error } = await supabase.rpc('admin_create_shipment', { p_origin: form.origin, p_destination: form.destination, p_description: form.description, p_receiver: form.receiver });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg(`Shipment created. Tracking code: ${data.tracking_code}`);
+    setForm({ origin: '', destination: '', receiver: '', description: '' });
+    load();
+  }
+
+  async function addEvent(e) {
+    e.preventDefault(); setErr(''); setMsg(''); setBusy(true);
+    const { error } = await supabase.rpc('admin_add_shipment_event', { p_id: editId, p_status: upd.status, p_location: upd.location, p_note: upd.note });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg('Shipment updated.');
+    setEditId(null); setUpd({ status: 'In transit', location: '', note: '' });
+    load();
+  }
+
+  return <div className="admin-ship">
+    <h2>Package tracking</h2>
+    <p className="muted">Register a shipment, then share its tracking code with the customer. The receiver name and internal notes are never shown publicly.</p>
+    {msg && <p className="form-status form-ok"><CheckCircle2 size={16}/>{msg}</p>}
+    {err && <p className="form-status"><AlertCircle size={16}/>{err}</p>}
+    <form className="ship-form" onSubmit={create}>
+      <label>From (origin)<input required maxLength="120" value={form.origin} onChange={e => setForm({ ...form, origin: e.target.value })} placeholder="e.g. Port Harcourt"/></label>
+      <label>To (destination)<input required maxLength="120" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} placeholder="e.g. Lagos"/></label>
+      <label>Receiver name (private)<input maxLength="120" value={form.receiver} onChange={e => setForm({ ...form, receiver: e.target.value })} placeholder="Optional"/></label>
+      <label>Internal notes (private)<input maxLength="200" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional"/></label>
+      <button className="button" disabled={busy}>{busy ? 'Saving…' : 'Create shipment'} <ArrowUpRight size={17}/></button>
+    </form>
+    <div className="table-wrap"><table><thead><tr><th>Code</th><th>Route</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td><b>{r.tracking_code}</b></td><td>{r.origin} → {r.destination}</td><td>{r.status}</td><td>{new Date(r.updated_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(r.id); setUpd({ status: r.status, location: '', note: '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No shipments yet.</p>}</div>
+    {editId && <form className="ship-form ship-update" onSubmit={addEvent}>
+      <p className="eyebrow">Update {rows.find(r => r.id === editId)?.tracking_code}</p>
+      <label>New status<select value={upd.status} onChange={e => setUpd({ ...upd, status: e.target.value })}>{STATUSES.map(st => <option key={st}>{st}</option>)}</select></label>
+      <label>Location<input maxLength="120" value={upd.location} onChange={e => setUpd({ ...upd, location: e.target.value })} placeholder="e.g. Benin City hub"/></label>
+      <label className="wide">Note for the customer<input maxLength="300" value={upd.note} onChange={e => setUpd({ ...upd, note: e.target.value })} placeholder="Optional"/></label>
+      <div className="ship-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save update'}</button><button type="button" className="button button-outline-dark" onClick={() => setEditId(null)}>Cancel</button></div>
+    </form>}
+  </div>;
 }
 
 function NotFound() { return <Layout><section className="not-found container"><p className="eyebrow">404 · Page not found</p><h1>This page took<br/><em>a wrong turn.</em></h1><Link className="button" to="/">Back to home <ArrowRight size={16}/></Link></section></Layout>; }
@@ -369,6 +502,7 @@ export default function App() {
     <Route path="/hospitality" element={<ServiceDetail type="Hotel & Restaurant"/>}/>
     <Route path="/vacations" element={<ServiceDetail type="Vacations"/>}/>
     <Route path="/about" element={<About/>}/>
+    <Route path="/track" element={<TrackPage/>}/>
     <Route path="/contact" element={<Contact/>}/>
     <Route path="/login" element={<AuthPage mode="login"/>}/>
     <Route path="/register" element={<AuthPage mode="register"/>}/>
