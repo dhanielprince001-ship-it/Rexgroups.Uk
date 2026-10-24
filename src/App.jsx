@@ -202,6 +202,7 @@ function AuthPage({ mode }) {
       : await supabase.auth.signInWithPassword({email:form.email.trim(),password:form.password});
     setBusy(false);
     if (result.error) setStatus(result.error.message);
+        else if (signup && result.data.user?.identities?.length === 0) setStatus('This email is already registered. Please sign in instead.');
     else if (signup && !result.data.session) setStatus('Account created. Check your email to confirm it, then log in.');
     else navigate('/dashboard');
   }
