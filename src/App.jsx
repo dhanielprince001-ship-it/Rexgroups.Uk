@@ -271,7 +271,8 @@ function Dashboard() {
       window.dispatchEvent(new Event('profile-updated'));
       setNotice('Profile picture updated.');
     } catch (err) {
-      setError('We could not upload your picture. Check that the latest supabase/schema.sql has been run, then try again.');
+            console.error(err);
+      setError('Upload failed: ' + (err?.message || 'unknown error'));
     } finally { setUploading(false); }
   }
 
