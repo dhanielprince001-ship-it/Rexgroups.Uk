@@ -96,3 +96,9 @@ main{animation:pageIn .45s ease}
 .ship-update .eyebrow{grid-column:1/-1;margin:0}
 .ship-actions{display:flex;gap:10px;flex-wrap:wrap}
 @media(max-width:700px){.track-steps small{font-size:10px}.track-card{padding:20px}.ship-form{grid-template-columns:1fr}.track-strip-inner form{max-width:none;width:100%}}
+/* booking forms */
+.booking-fields{border:1px solid var(--line);border-radius:8px;padding:16px 16px 4px;margin:0 0 17px;background:var(--paper);display:grid;grid-template-columns:1fr 1fr;column-gap:12px}
+.booking-fields legend{padding:0 8px;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--blue)}
+.booking-fields .wide{grid-column:1/-1}
+@media(max-width:480px){.booking-fields{grid-template-columns:1fr}}
+
