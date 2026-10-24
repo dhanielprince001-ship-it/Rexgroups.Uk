@@ -204,28 +204,83 @@ function About() {
   return <Layout><PageHero eyebrow="About Rex Groups" title={<>Built around people.<br/><em>Ready for what’s next.</em></>} image="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1800&q=85" description="A multi-service group bringing logistics, hospitality and vacation enquiries together in one place."/><section className="section container about-grid"><div><p className="eyebrow">Who we are</p><h2>One place to start<br/><em>your next journey.</em></h2></div><div className="about-copy"><p>Rex Groups brings together three everyday needs: moving items, arranging places to stay and eat, and planning time away. We want it to be simple for customers to find the right service and get in touch with a real person.</p><p>Our approach is straightforward: listen carefully, communicate clearly and help customers understand their next steps.</p><Link to="/contact" className="text-link">Get in touch <ArrowRight size={16}/></Link></div></section><section className="values-section"><div className="container values-grid">{[['01','Customer first','Helpful, respectful communication at every step.'],['02','Practical solutions','Clear information to help you make decisions.'],['03','Connected services','Different service areas, accessible from one website.']].map(v=><article className="value-card reveal" key={v[0]}><span>{v[0]}</span><h3>{v[1]}</h3><p>{v[2]}</p></article>)}</div></section></Layout>;
 }
 
+const DETAIL_LABELS = { stay_type: 'Type', check_in: 'Check-in', check_out: 'Check-out', date: 'Date', guests: 'Guests', rooms: 'Rooms', destination: 'Destination', depart: 'Departure', return: 'Return', adults: 'Adults', children: 'Children', budget: 'Budget' };
+
+function formatDetails(details) {
+  if (!details || typeof details !== 'object') return '';
+  return Object.entries(details).map(([k, v]) => `${DETAIL_LABELS[k] || k}: ${v}`).join(' · ');
+}
+
 function Contact() {
   const [params] = useSearchParams();
   const options = ['Logistics', 'Hotel & Restaurant', 'Vacations', 'Other enquiry'];
   const wanted = params.get('service');
   const [form, setForm] = useState({name:'',email:'',service: options.includes(wanted) ? wanted : 'Logistics',message:''});
+  const emptyDetails = { stay_type: 'Room stay', check_in: '', check_out: '', date: '', guests: '2', rooms: '1', destination: '', depart: '', return: '', adults: '2', children: '0', budget: '' };
+  const [d, setD] = useState(emptyDetails);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const isHotel = form.service === 'Hotel & Restaurant';
+  const isTrip = form.service === 'Vacations';
+  const isBooking = isHotel || isTrip;
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+  function buildDetails() {
+    let src = null;
+    if (isHotel) {
+      src = d.stay_type === 'Room stay'
+        ? { stay_type: d.stay_type, check_in: d.check_in, check_out: d.check_out, guests: d.guests, rooms: d.rooms }
+        : { stay_type: d.stay_type, date: d.date, guests: d.guests };
+    } else if (isTrip) {
+      src = { destination: d.destination, depart: d.depart, return: d.return, adults: d.adults, children: d.children, budget: d.budget };
+    }
+    if (!src) return null;
+    const out = {};
+    Object.entries(src).forEach(([k, v]) => { const t = String(v ?? '').trim(); if (t !== '') out[k] = t; });
+    return Object.keys(out).length ? out : null;
+  }
+
   async function submit(e) {
-    e.preventDefault(); setBusy(true); setStatus('');
+    e.preventDefault(); setStatus('');
+    if (isHotel && d.stay_type === 'Room stay' && d.check_out <= d.check_in) { setStatus('Check-out must be after check-in.'); return; }
+    if (isTrip && d.return && d.return < d.depart) { setStatus('Return date cannot be before the departure date.'); return; }
+    setBusy(true);
+    const details = buildDetails();
+    const message = form.message.trim() || (isBooking ? 'No additional message.' : '');
     if (supabase) {
-      const { error } = await supabase.from('enquiries').insert([{name:form.name.trim(),email:form.email.trim(),service:form.service,message:form.message.trim()}]);
+      const { error } = await supabase.from('enquiries').insert([{name:form.name.trim(),email:form.email.trim(),service:form.service,message,details}]);
       if (error) setStatus('We could not save this enquiry. Please use email or WhatsApp instead.');
-      else { setStatus('Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); }
+      else { setStatus('Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); setD(emptyDetails); }
     } else {
       const subject = encodeURIComponent(`Rex Groups enquiry: ${form.service}`);
-      const body = encodeURIComponent(`Name: ${form.name}\nEmail: ${form.email}\nService: ${form.service}\n\n${form.message}`);
+      const extra = details ? `\nDetails: ${formatDetails(details)}` : '';
+      const body = encodeURIComponent(`Name: ${form.name}\nEmail: ${form.email}\nService: ${form.service}${extra}\n\n${message}`);
       window.location.href = `mailto:${contact.email}?subject=${subject}&body=${body}`;
       setStatus('Your email app should open with your enquiry prepared. Connect the database to store enquiries on the website.');
     }
     setBusy(false);
   }
-  return <Layout><PageHero eyebrow="Contact us" title={<>Let’s get the<br/><em>conversation started.</em></>} image="https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1800&q=85" description="Have a question or a plan in mind? Send us a message and tell us how we can help."/><section className="section container contact-layout"><div className="contact-info"><p className="eyebrow">Get in touch</p><h2>We’re happy<br/><em>to hear from you.</em></h2><p>Choose the easiest way to reach Rex Groups. For urgent questions, call or message us directly.</p><a className="contact-method" href={`mailto:${contact.email}`}><span><Mail/></span><div><small>Email us</small><b>{contact.email}</b></div><ArrowUpRight/></a><a className="contact-method" href={`tel:${contact.phone}`}><span><Phone/></span><div><small>Call us</small><b>{contact.phone}</b></div><ArrowUpRight/></a><a className="contact-method" href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer"><span><Send/></span><div><small>WhatsApp</small><b>Chat with our team</b></div><ArrowUpRight/></a><div className="response-note"><Clock3 size={18}/><span>Send us your enquiry and we’ll follow up as soon as we can.</span></div></div><form className="form-card" onSubmit={submit}><p className="eyebrow">Send a message</p><h3>How can we help?</h3><label>Your name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Full name"/></label><label>Email address<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label><label>Service you’re interested in<select value={form.service} onChange={e=>setForm({...form,service:e.target.value})}><option>Logistics</option><option>Hotel & Restaurant</option><option>Vacations</option><option>Other enquiry</option></select></label><label>Message<textarea required rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form.</small></form></section><section className="section container faq-section"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Before you<br/><em>send a message.</em></h2></div></div><FAQ/></section></Layout>;
+  return <Layout><PageHero eyebrow="Contact us" title={<>Let’s get the<br/><em>conversation started.</em></>} image="https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1800&q=85" description="Have a question or a plan in mind? Send us a message and tell us how we can help."/><section className="section container contact-layout"><div className="contact-info"><p className="eyebrow">Get in touch</p><h2>We’re happy<br/><em>to hear from you.</em></h2><p>Choose the easiest way to reach Rex Groups. For urgent questions, call or message us directly.</p><a className="contact-method" href={`mailto:${contact.email}`}><span><Mail/></span><div><small>Email us</small><b>{contact.email}</b></div><ArrowUpRight/></a><a className="contact-method" href={`tel:${contact.phone}`}><span><Phone/></span><div><small>Call us</small><b>{contact.phone}</b></div><ArrowUpRight/></a><a className="contact-method" href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer"><span><Send/></span><div><small>WhatsApp</small><b>Chat with our team</b></div><ArrowUpRight/></a><div className="response-note"><Clock3 size={18}/><span>Send us your enquiry and we’ll follow up as soon as we can.</span></div></div><form className="form-card" onSubmit={submit}><p className="eyebrow">Send a message</p><h3>How can we help?</h3><label>Your name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Full name"/></label><label>Email address<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label><label>Service you’re interested in<select value={form.service} onChange={e=>setForm({...form,service:e.target.value})}><option>Logistics</option><option>Hotel & Restaurant</option><option>Vacations</option><option>Other enquiry</option></select></label>{isHotel && <fieldset className="booking-fields"><legend>Booking details</legend>
+      <label className="wide">What do you need?<select value={d.stay_type} onChange={e=>setD({...d,stay_type:e.target.value})}><option>Room stay</option><option>Restaurant table</option><option>Event or group booking</option></select></label>
+      {d.stay_type === 'Room stay' ? <>
+        <label>Check-in<input type="date" required min={today} value={d.check_in} onChange={e=>setD({...d,check_in:e.target.value,check_out:d.check_out && d.check_out <= e.target.value ? '' : d.check_out})}/></label>
+        <label>Check-out<input type="date" required min={d.check_in || today} value={d.check_out} onChange={e=>setD({...d,check_out:e.target.value})}/></label>
+        <label>Guests<input type="number" required min="1" max="50" value={d.guests} onChange={e=>setD({...d,guests:e.target.value})}/></label>
+        <label>Rooms<input type="number" required min="1" max="20" value={d.rooms} onChange={e=>setD({...d,rooms:e.target.value})}/></label>
+      </> : <>
+        <label>Date<input type="date" required min={today} value={d.date} onChange={e=>setD({...d,date:e.target.value})}/></label>
+        <label>Number of guests<input type="number" required min="1" max="500" value={d.guests} onChange={e=>setD({...d,guests:e.target.value})}/></label>
+      </>}
+    </fieldset>}
+    {isTrip && <fieldset className="booking-fields"><legend>Trip details</legend>
+      <label className="wide">Where would you like to go?<input required maxLength="120" value={d.destination} onChange={e=>setD({...d,destination:e.target.value})} placeholder="e.g. Dubai, Cape Town, Obudu"/></label>
+      <label>Departure date<input type="date" required min={today} value={d.depart} onChange={e=>setD({...d,depart:e.target.value,return:d.return && d.return < e.target.value ? '' : d.return})}/></label>
+      <label>Return date (optional)<input type="date" min={d.depart || today} value={d.return} onChange={e=>setD({...d,return:e.target.value})}/></label>
+      <label>Adults<input type="number" required min="1" max="50" value={d.adults} onChange={e=>setD({...d,adults:e.target.value})}/></label>
+      <label>Children<input type="number" min="0" max="50" value={d.children} onChange={e=>setD({...d,children:e.target.value})}/></label>
+      <label className="wide">Budget (optional)<input maxLength="80" value={d.budget} onChange={e=>setD({...d,budget:e.target.value})} placeholder="e.g. ₦500,000 or flexible"/></label>
+    </fieldset>}
+    <label>{isBooking ? 'Anything else we should know? (optional)' : 'Message'}<textarea required={!isBooking} rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form.</small></form></section><section className="section container faq-section"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Before you<br/><em>send a message.</em></h2></div></div><FAQ/></section></Layout>;
 }
 
 function AuthPage({ mode }) {
@@ -356,7 +411,7 @@ function Dashboard() {
       <label>Please add your full name to continue<input required maxLength="120" autoComplete="name" value={nameDraft} onChange={e=>setNameDraft(e.target.value)} placeholder="Your full name"/></label>
       <button className="button">Save name</button>
     </form>}
-    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
+    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
   </section></Layout>;
 }
 
