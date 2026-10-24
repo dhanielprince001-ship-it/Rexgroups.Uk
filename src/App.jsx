@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package } from 'lucide-react';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package, Star, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 
@@ -97,6 +97,25 @@ function resizeImage(file, max = 512) {
   });
 }
 
+// Keeps the whole photo (no cropping), just makes it smaller so uploads are quick.
+function shrinkImage(file, max = 1600) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(src);
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not process image')), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(src); reject(new Error('Could not read image')); };
+    img.src = src;
+  });
+}
+
 function Header() {
   const [open, setOpen] = useState(false);
   const { session, profile } = useAuth();
@@ -127,7 +146,7 @@ function Footer() {
   return <footer className="footer">
     <div className="container footer-grid">
       <div><Link to="/" className="brand footer-brand"><span className="brand-mark">R<span>↗</span></span><span className="brand-copy"><b>REX</b><small>GROUPS</small></span></Link><p>Logistics · Hospitality · Vacations</p><p className="muted">More than just services. We help you move, stay, dine and explore.</p></div>
-      <div><h4>Explore</h4><Link to="/">Home</Link><Link to="/services">Our services</Link><Link to="/track">Track a package</Link><Link to="/about">About us</Link><Link to="/contact">Contact</Link></div>
+      <div><h4>Explore</h4><Link to="/">Home</Link><Link to="/services">Our services</Link><Link to="/track">Track a package</Link><Link to="/gallery">Gallery</Link><Link to="/about">About us</Link><Link to="/contact">Contact</Link></div>
       <div><h4>Our services</h4><Link to="/logistics">Logistics</Link><Link to="/hospitality">Hotel & Restaurant</Link><Link to="/vacations">Vacations</Link></div>
       <div><h4>Get in touch</h4><a href={`mailto:${contact.email}`}><Mail size={15}/>{contact.email}</a><a href={`tel:${contact.phone}`}><Phone size={15}/>{contact.phone}</a><a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer">WhatsApp support <ArrowUpRight size={14}/></a></div>
     </div>
@@ -160,6 +179,7 @@ function ServiceCard({ service }) {
 }
 
 function Home() {
+  const { reviews, photos } = usePublicContent();
   return <Layout>
     <section className="hero">
       <div className="hero-image"></div><div className="container hero-content">
@@ -181,6 +201,8 @@ function Home() {
       <div className="section-heading reveal"><div><p className="eyebrow">How it works</p><h2>Three simple steps.<br/><em>No complicated process.</em></h2></div><p>Getting started should be easy. Here is what to expect when you contact Rex Groups.</p></div>
       <div className="steps-grid">{[[ClipboardList,'Tell us what you need','Choose a service and share a few details through the form, WhatsApp, phone or email.'],[PhoneCall,'We get back to you','Our team reviews your enquiry and contacts you to talk through the options.'],[ThumbsUp,'Move forward with confidence','Once the details are clear, we help you take the next step.']].map(([Icon, t, d], i) => <article className="step-card reveal" style={{'--d': `${i * 0.09}s`}} key={t}><span className="step-num">0{i + 1}</span><span className="icon-tile"><Icon size={21}/></span><h3>{t}</h3><p>{d}</p></article>)}</div>
     </div></section>
+    <ReviewsSection reviews={reviews}/>
+    {photos.length > 0 && <section className="section container gallery-preview"><div className="section-heading"><div><p className="eyebrow">Gallery</p><h2>See us<br/><em>in pictures.</em></h2></div><Link className="text-link" to="/gallery">View all photos <ArrowRight size={16}/></Link></div><div className="gallery-strip">{photos.slice(0, 6).map(ph => <Link to="/gallery" key={ph.id} className="gallery-item"><img src={ph.url} alt={ph.caption || 'Rex Groups photo'} loading="lazy"/></Link>)}</div></section>}
     <section className="section container faq-section reveal"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Good to know<br/><em>before you reach out.</em></h2></div><p>Quick answers to the things people ask us most.</p></div><FAQ/></section>
     <section className="feature-band"><div className="container feature-inner"><div><p className="eyebrow light-eyebrow">A simpler way forward</p><h2>Tell us what you need.<br/><em>We’ll help with the next step.</em></h2><p>Reach out to our team for service details, availability and tailored enquiries.</p><Link className="button button-gold" to="/contact">Contact Rex Groups <ArrowUpRight size={17}/></Link></div><div className="feature-visual"><div className="feature-stat"><span>01</span><b>One team</b><small>Easy enquiries</small></div><div className="feature-stat"><span>02</span><b>Three services</b><small>More ways to help</small></div><div className="feature-stat"><span>03</span><b>Human support</b><small>Clear communication</small></div></div></div></section>
   </Layout>;
@@ -411,7 +433,7 @@ function Dashboard() {
       <label>Please add your full name to continue<input required maxLength="120" autoComplete="name" value={nameDraft} onChange={e=>setNameDraft(e.target.value)} placeholder="Your full name"/></label>
       <button className="button">Save name</button>
     </form>}
-    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
+    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/><AdminReviews/><AdminGallery/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
   </section></Layout>;
 }
 
@@ -547,6 +569,215 @@ function AdminShipments() {
   </div>;
 }
 
+function usePublicContent() {
+  const [reviews, setReviews] = useState([]);
+  const [photos, setPhotos] = useState([]);
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.from('reviews').select('id,author_name,location,rating,body,created_at').eq('status', 'published').order('created_at', { ascending: false }).limit(12)
+      .then(({ data }) => { if (active && data) setReviews(data); });
+    supabase.from('gallery_photos').select('id,path,caption,created_at').order('created_at', { ascending: false }).limit(60)
+      .then(({ data }) => { if (active && data) setPhotos(data.map(ph => ({ ...ph, url: supabase.storage.from('gallery').getPublicUrl(ph.path).data.publicUrl }))); });
+    return () => { active = false; };
+  }, []);
+  return { reviews, photos };
+}
+
+function Stars({ value, size = 16 }) {
+  return <span className="stars" role="img" aria-label={`${value} out of 5 stars`}>{[1, 2, 3, 4, 5].map(n => <Star key={n} size={size} fill={n <= value ? 'currentColor' : 'none'}/>)}</span>;
+}
+
+function ReviewsSection({ reviews }) {
+  const { session } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [body, setBody] = useState('');
+  const [state, setState] = useState({ busy: false, msg: '', ok: false });
+
+  async function submit(e) {
+    e.preventDefault();
+    setState({ busy: true, msg: '', ok: false });
+    const { error } = await supabase.rpc('submit_review', { p_rating: rating, p_body: body });
+    if (error) setState({ busy: false, msg: error.message, ok: false });
+    else { setState({ busy: false, msg: 'Thank you! Your review will appear once our team approves it.', ok: true }); setBody(''); setOpen(false); }
+  }
+
+  return <section className="section container reviews-section reveal">
+    <div className="section-heading"><div><p className="eyebrow">Customer reviews</p><h2>{reviews.length ? <>What our customers<br/><em>are saying.</em></> : <>Used Rex Groups?<br/><em>Share your experience.</em></>}</h2></div><p>Honest feedback helps other customers and helps us improve.</p></div>
+    {reviews.length > 0 && <div className="review-grid">{reviews.map(r => <article className="review-card" key={r.id}>
+      <Stars value={r.rating}/>
+      <p>“{r.body}”</p>
+      <footer><b>{r.author_name}</b>{r.location && <small>{r.location}</small>}</footer>
+    </article>)}</div>}
+    <div className="review-cta">
+      {state.msg && <p className={state.ok ? 'form-status form-ok' : 'form-status'}>{state.ok ? <CheckCircle2 size={16}/> : <AlertCircle size={16}/>}{state.msg}</p>}
+      {!supabase ? null : !session
+        ? <Link className="button button-outline-dark" to="/login">Sign in to write a review</Link>
+        : open
+          ? <form className="review-form" onSubmit={submit}>
+              <div className="rating-input" role="radiogroup" aria-label="Your rating">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)} aria-label={`${n} star${n > 1 ? 's' : ''}`} aria-checked={rating === n} role="radio"><Star size={28} fill={n <= rating ? 'currentColor' : 'none'}/></button>)}</div>
+              <label>Your review<textarea required minLength="5" maxLength="600" rows="4" value={body} onChange={e => setBody(e.target.value)} placeholder="Tell us about your experience with Rex Groups..."/></label>
+              <div className="ship-actions"><button className="button" disabled={state.busy}>{state.busy ? 'Sending…' : 'Submit review'}</button><button type="button" className="button button-outline-dark" onClick={() => setOpen(false)}>Cancel</button></div>
+            </form>
+          : <button type="button" className="button button-outline-dark" onClick={() => { setOpen(true); setState({ busy: false, msg: '', ok: false }); }}>Write a review</button>}
+    </div>
+  </section>;
+}
+
+function Lightbox({ photos, index, setIndex }) {
+  const ph = photos[index];
+  const close = () => setIndex(null);
+  const prev = () => setIndex((index + photos.length - 1) % photos.length);
+  const next = () => setIndex((index + 1) % photos.length);
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') close(); if (e.key === 'ArrowLeft') prev(); if (e.key === 'ArrowRight') next(); };
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+  }, [index]);
+  if (!ph) return null;
+  return <div className="lightbox" role="dialog" aria-modal="true" onClick={close}>
+    <button type="button" className="lb-close" onClick={close} aria-label="Close"><X/></button>
+    {photos.length > 1 && <button type="button" className="lb-nav prev" onClick={e => { e.stopPropagation(); prev(); }} aria-label="Previous photo"><ChevronLeft/></button>}
+    <figure onClick={e => e.stopPropagation()}><img src={ph.url} alt={ph.caption || 'Rex Groups photo'}/>{ph.caption && <figcaption>{ph.caption}</figcaption>}</figure>
+    {photos.length > 1 && <button type="button" className="lb-nav next" onClick={e => { e.stopPropagation(); next(); }} aria-label="Next photo"><ChevronRight/></button>}
+  </div>;
+}
+
+function GalleryPage() {
+  const { photos } = usePublicContent();
+  const [idx, setIdx] = useState(null);
+  return <Layout>
+    <PageHero eyebrow="Gallery" title={<>Rex Groups,<br/><em>in pictures.</em></>} image={services[2].image} description="Take a look at what we do."/>
+    <section className="section container">
+      {photos.length
+        ? <div className="gallery-grid">{photos.map((ph, i) => <button type="button" className="gallery-item" key={ph.id} onClick={() => setIdx(i)}><img src={ph.url} alt={ph.caption || 'Rex Groups photo'} loading="lazy"/>{ph.caption && <span>{ph.caption}</span>}</button>)}</div>
+        : <p className="muted">Photos are coming soon. Please check back shortly.</p>}
+    </section>
+    {idx !== null && <Lightbox photos={photos} index={idx} setIndex={setIdx}/>}
+  </Layout>;
+}
+
+function AdminReviews() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ author: '', location: '', rating: 5, body: '' });
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('reviews').select('id,author_name,location,rating,body,status,created_at').order('created_at', { ascending: false }).limit(100);
+    if (error) setErr('Could not load reviews. Check that the gallery and reviews SQL has been run in Supabase.');
+    else setRows(data || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function setStatus(id, status) {
+    setErr(''); setMsg('');
+    const { error } = await supabase.from('reviews').update({ status }).eq('id', id);
+    if (error) setErr(error.message); else load();
+  }
+  async function remove(id) {
+    if (!window.confirm('Delete this review?')) return;
+    setErr(''); setMsg('');
+    const { error } = await supabase.from('reviews').delete().eq('id', id);
+    if (error) setErr(error.message); else load();
+  }
+  async function add(e) {
+    e.preventDefault(); setErr(''); setMsg(''); setBusy(true);
+    const { error } = await supabase.from('reviews').insert([{ author_name: form.author.trim(), location: form.location.trim() || null, rating: Number(form.rating), body: form.body.trim(), status: 'published' }]);
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg('Review added and published.');
+    setForm({ author: '', location: '', rating: 5, body: '' });
+    load();
+  }
+
+  const pending = rows.filter(r => r.status === 'pending').length;
+  return <div className="admin-ship">
+    <h2>Customer reviews{pending > 0 && <span className="count-pill">{pending} waiting</span>}</h2>
+    <p className="muted">Reviews written by customers stay hidden until you publish them. Only add reviews here that a customer has given you permission to show.</p>
+    {msg && <p className="form-status form-ok"><CheckCircle2 size={16}/>{msg}</p>}
+    {err && <p className="form-status"><AlertCircle size={16}/>{err}</p>}
+    <div className="mini-list">{rows.map(r => <article className="mini-item" key={r.id}>
+      <div><Stars value={r.rating} size={14}/> <b>{r.author_name}</b>{r.location && <small> · {r.location}</small>} <span className={r.status === 'published' ? 'status-badge done' : 'status-badge hold'}>{r.status === 'published' ? 'Published' : 'Waiting'}</span></div>
+      <p>{r.body}</p>
+      <div className="ship-actions">
+        {r.status === 'pending' ? <button type="button" className="button button-small" onClick={() => setStatus(r.id, 'published')}>Publish</button> : <button type="button" className="button button-small button-outline-dark" onClick={() => setStatus(r.id, 'pending')}>Hide</button>}
+        <button type="button" className="button button-small button-outline-dark" onClick={() => remove(r.id)}><Trash2 size={14}/> Delete</button>
+      </div>
+    </article>)}{!rows.length && <p className="muted table-empty">No reviews yet.</p>}</div>
+    <form className="ship-form" onSubmit={add}>
+      <p className="eyebrow wide">Add a review with the customer’s permission</p>
+      <label>Customer name<input required maxLength="120" value={form.author} onChange={e => setForm({ ...form, author: e.target.value })}/></label>
+      <label>Location (optional)<input maxLength="120" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="e.g. Port Harcourt"/></label>
+      <label>Rating<select value={form.rating} onChange={e => setForm({ ...form, rating: e.target.value })}>{[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>{n} star{n > 1 ? 's' : ''}</option>)}</select></label>
+      <label className="wide">Review<input required minLength="5" maxLength="600" value={form.body} onChange={e => setForm({ ...form, body: e.target.value })}/></label>
+      <button className="button" disabled={busy}>{busy ? 'Saving…' : 'Add and publish'}</button>
+    </form>
+  </div>;
+}
+
+function AdminGallery() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [caption, setCaption] = useState('');
+  const fileRef = useRef(null);
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('gallery_photos').select('id,path,caption,created_at').order('created_at', { ascending: false }).limit(100);
+    if (error) setErr('Could not load photos. Check that the gallery and reviews SQL has been run in Supabase.');
+    else setRows((data || []).map(ph => ({ ...ph, url: supabase.storage.from('gallery').getPublicUrl(ph.path).data.publicUrl })));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function upload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setErr(''); setMsg('');
+    if (!file.type.startsWith('image/')) { setErr('Please choose an image file.'); return; }
+    setBusy(true);
+    try {
+      const blob = await shrinkImage(file, 1600);
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const { error: upErr } = await supabase.storage.from('gallery').upload(path, blob, { contentType: 'image/jpeg', cacheControl: '3600' });
+      if (upErr) throw upErr;
+      const { error: dbErr } = await supabase.from('gallery_photos').insert([{ path, caption: caption.trim() || null }]);
+      if (dbErr) { await supabase.storage.from('gallery').remove([path]); throw dbErr; }
+      setMsg('Photo added to the gallery.');
+      setCaption('');
+      load();
+    } catch (ex) {
+      setErr('Upload failed: ' + (ex?.message || 'unknown error'));
+    } finally { setBusy(false); }
+  }
+
+  async function remove(ph) {
+    if (!window.confirm('Delete this photo?')) return;
+    setErr(''); setMsg('');
+    const { error } = await supabase.from('gallery_photos').delete().eq('id', ph.id);
+    if (error) { setErr(error.message); return; }
+    await supabase.storage.from('gallery').remove([ph.path]);
+    load();
+  }
+
+  return <div className="admin-ship">
+    <h2>Photo gallery</h2>
+    <p className="muted">Only upload photos that Rex Groups owns or has permission to use.</p>
+    {msg && <p className="form-status form-ok"><CheckCircle2 size={16}/>{msg}</p>}
+    {err && <p className="form-status"><AlertCircle size={16}/>{err}</p>}
+    <div className="ship-form">
+      <label className="wide">Caption (optional, type this first)<input maxLength="120" value={caption} onChange={e => setCaption(e.target.value)} placeholder="e.g. Deliveries ready to go"/></label>
+      <div className="ship-actions"><button type="button" className="button" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Uploading…' : 'Choose a photo'} <Camera size={16}/></button><input ref={fileRef} type="file" accept="image/*" hidden onChange={upload}/></div>
+    </div>
+    <div className="admin-photos">{rows.map(ph => <figure key={ph.id}><img src={ph.url} alt={ph.caption || ''} loading="lazy"/><figcaption>{ph.caption || 'No caption'}</figcaption><button type="button" className="button button-small button-outline-dark" onClick={() => remove(ph)}><Trash2 size={14}/> Delete</button></figure>)}{!rows.length && <p className="muted table-empty">No photos yet.</p>}</div>
+  </div>;
+}
+
 function NotFound() { return <Layout><section className="not-found container"><p className="eyebrow">404 · Page not found</p><h1>This page took<br/><em>a wrong turn.</em></h1><Link className="button" to="/">Back to home <ArrowRight size={16}/></Link></section></Layout>; }
 
 export default function App() {
@@ -558,6 +789,7 @@ export default function App() {
     <Route path="/vacations" element={<ServiceDetail type="Vacations"/>}/>
     <Route path="/about" element={<About/>}/>
     <Route path="/track" element={<TrackPage/>}/>
+    <Route path="/gallery" element={<GalleryPage/>}/>
     <Route path="/contact" element={<Contact/>}/>
     <Route path="/login" element={<AuthPage mode="login"/>}/>
     <Route path="/register" element={<AuthPage mode="register"/>}/>
