@@ -1,13 +1,40 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera } from 'lucide-react';
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 
 const iconMap = { truck: Truck, hotel: Hotel, plane: Plane };
 
 function WhatsApp() {
-  return <a className="whatsapp-float" href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent('Hello Rex Groups, I would like to make an enquiry.')}`} target="_blank" rel="noreferrer" aria-label="Chat with Rex Groups on WhatsApp">WA</a>;
+  return <a className="whatsapp-float" href={`https://wa.me/${contact.whatsapp}?text=${encodeURIComponent('Hello Rex Groups, I would like to make an enquiry.')}`} target="_blank" rel="noreferrer" aria-label="Chat with Rex Groups on WhatsApp"><MessageCircle size={26}/></a>;
+}
+
+function BackToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const on = () => setShow(window.scrollY > 600);
+    on();
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
+  return <button type="button" className={show ? 'to-top show' : 'to-top'} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top"><ArrowUp size={20}/></button>;
+}
+
+const faqs = [
+  ['How do I make an enquiry?', 'Use the contact form, send us a WhatsApp message, call or email. Tell us what you need and our team will follow up.'],
+  ['Which services does Rex Groups offer?', 'We help with logistics, hotel and restaurant services, and vacation planning.'],
+  ['Do I need an account to contact you?', 'No. You can send an enquiry without signing in. An account gives you a personal area with your name and profile picture.'],
+  ['Can I pay online on this website?', 'Online payments are not available on this website yet. Our team will guide you on the next steps when you make an enquiry.'],
+  ['What should I include in my message?', 'Share your name, the service you are interested in and key details such as dates, locations or the number of people, so we can help faster.']
+];
+
+function FAQ() {
+  const [open, setOpen] = useState(0);
+  return <div className="faq-list">{faqs.map(([q, a], i) => <div key={q} className={open === i ? 'faq-item open' : 'faq-item'}>
+    <button type="button" aria-expanded={open === i} onClick={() => setOpen(open === i ? -1 : i)}><span>{q}</span><ChevronDown size={18}/></button>
+    {open === i && <p>{a}</p>}
+  </div>)}</div>;
 }
 
 function displayNameOf(session, profile) {
@@ -111,13 +138,22 @@ function Footer() {
 function Layout({ children }) {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo({ top: 0, left: 0 }); }, [pathname]);
-  return <><Header/><main>{children}</main><Footer/><WhatsApp/></>;
+  useEffect(() => {
+    const els = document.querySelectorAll('.reveal:not(.in)');
+    if (!('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('in')); return; }
+    const io = new IntersectionObserver(entries => entries.forEach(en => {
+      if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+    }), { threshold: 0.12 });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, [pathname]);
+  return <><Header/><main>{children}</main><Footer/><BackToTop/><WhatsApp/></>;
 }
 
 function ServiceCard({ service }) {
   const Icon = iconMap[service.icon] || ArrowRight;
   const path = service.title === 'Logistics' ? '/logistics' : service.title === 'Vacations' ? '/vacations' : '/hospitality';
-  return <article className="service-card">
+  return <article className="service-card reveal">
     <Link to={path} className="service-image"><img src={service.image} alt={service.title}/><span className="image-arrow"><ArrowUpRight size={19}/></span></Link>
     <div className="service-card-body"><span className="icon-tile"><Icon size={21}/></span><p className="eyebrow">{service.eyebrow}</p><h3>{service.title}</h3><p>{service.description}</p><Link className="text-link" to={path}>Explore service <ArrowRight size={16}/></Link></div>
   </article>;
@@ -140,6 +176,11 @@ function Home() {
       <div className="section-heading"><div><p className="eyebrow">What we do</p><h2>Different needs.<br/><em>One trusted team.</em></h2></div><p>Whether you are sending a package, arranging a stay or planning time away, start with the service that fits your needs.</p></div>
       <div className="service-grid">{services.map(s => <ServiceCard key={s.title} service={s}/>)}</div>
     </section>
+    <section className="steps-section"><div className="container">
+      <div className="section-heading reveal"><div><p className="eyebrow">How it works</p><h2>Three simple steps.<br/><em>No complicated process.</em></h2></div><p>Getting started should be easy. Here is what to expect when you contact Rex Groups.</p></div>
+      <div className="steps-grid">{[[ClipboardList,'Tell us what you need','Choose a service and share a few details through the form, WhatsApp, phone or email.'],[PhoneCall,'We get back to you','Our team reviews your enquiry and contacts you to talk through the options.'],[ThumbsUp,'Move forward with confidence','Once the details are clear, we help you take the next step.']].map(([Icon, t, d], i) => <article className="step-card reveal" style={{'--d': `${i * 0.09}s`}} key={t}><span className="step-num">0{i + 1}</span><span className="icon-tile"><Icon size={21}/></span><h3>{t}</h3><p>{d}</p></article>)}</div>
+    </div></section>
+    <section className="section container faq-section reveal"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Good to know<br/><em>before you reach out.</em></h2></div><p>Quick answers to the things people ask us most.</p></div><FAQ/></section>
     <section className="feature-band"><div className="container feature-inner"><div><p className="eyebrow light-eyebrow">A simpler way forward</p><h2>Tell us what you need.<br/><em>We’ll help with the next step.</em></h2><p>Reach out to our team for service details, availability and tailored enquiries.</p><Link className="button button-gold" to="/contact">Contact Rex Groups <ArrowUpRight size={17}/></Link></div><div className="feature-visual"><div className="feature-stat"><span>01</span><b>One team</b><small>Easy enquiries</small></div><div className="feature-stat"><span>02</span><b>Three services</b><small>More ways to help</small></div><div className="feature-stat"><span>03</span><b>Human support</b><small>Clear communication</small></div></div></div></section>
   </Layout>;
 }
@@ -155,15 +196,18 @@ function PageHero({ eyebrow, title, image, description }) {
 function ServiceDetail({ type }) {
   const service = services.find(s => s.title === type) || services[0];
   const Icon = iconMap[service.icon] || Truck;
-  return <Layout><PageHero eyebrow={service.eyebrow} title={<>{service.title === 'Hotel & Restaurant' ? <>Stay well.<br/><em>Eat well.</em></> : service.title === 'Vacations' ? <>Make room for<br/><em>new memories.</em></> : <>Move with<br/><em>confidence.</em></>}</>} image={service.image} description={service.description}/><section className="section container detail-layout"><div className="detail-copy"><p className="eyebrow">How we can help</p><h2>Thoughtful support,<br/><em>from the first enquiry.</em></h2><p>{service.description} Contact our team to discuss your requirements, timelines and available options.</p><ul className="check-list">{service.bullets.map(b=><li key={b}><CheckCircle2 size={19}/>{b}</li>)}</ul><Link to="/contact" className="button">Make an enquiry <ArrowUpRight size={17}/></Link></div><div className="detail-photo"><img src={service.image} alt={service.title}/><div className="photo-caption"><span className="icon-tile"><Icon/></span><div><b>{service.title}</b><small>Personal service, practical solutions</small></div></div></div></section><section className="mini-cta"><div className="container mini-cta-inner"><div><h2>Need help with {service.title.toLowerCase()}?</h2><p>Tell us a little about what you have in mind.</p></div><Link to="/contact" className="button button-gold">Contact our team <ArrowRight size={16}/></Link></div></section></Layout>;
+  return <Layout><PageHero eyebrow={service.eyebrow} title={<>{service.title === 'Hotel & Restaurant' ? <>Stay well.<br/><em>Eat well.</em></> : service.title === 'Vacations' ? <>Make room for<br/><em>new memories.</em></> : <>Move with<br/><em>confidence.</em></>}</>} image={service.image} description={service.description}/><section className="section container detail-layout"><div className="detail-copy"><p className="eyebrow">How we can help</p><h2>Thoughtful support,<br/><em>from the first enquiry.</em></h2><p>{service.description} Contact our team to discuss your requirements, timelines and available options.</p><ul className="check-list">{service.bullets.map(b=><li key={b}><CheckCircle2 size={19}/>{b}</li>)}</ul><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button">Make an enquiry <ArrowUpRight size={17}/></Link></div><div className="detail-photo"><img src={service.image} alt={service.title}/><div className="photo-caption"><span className="icon-tile"><Icon/></span><div><b>{service.title}</b><small>Personal service, practical solutions</small></div></div></div></section><section className="mini-cta"><div className="container mini-cta-inner"><div><h2>Need help with {service.title.toLowerCase()}?</h2><p>Tell us a little about what you have in mind.</p></div><Link to={`/contact?service=${encodeURIComponent(service.title)}`} className="button button-gold">Contact our team <ArrowRight size={16}/></Link></div></section></Layout>;
 }
 
 function About() {
-  return <Layout><PageHero eyebrow="About Rex Groups" title={<>Built around people.<br/><em>Ready for what’s next.</em></>} image="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1800&q=85" description="A multi-service group bringing logistics, hospitality and vacation enquiries together in one place."/><section className="section container about-grid"><div><p className="eyebrow">Who we are</p><h2>One place to start<br/><em>your next journey.</em></h2></div><div className="about-copy"><p>Rex Groups brings together three everyday needs: moving items, arranging places to stay and eat, and planning time away. We want it to be simple for customers to find the right service and get in touch with a real person.</p><p>Our approach is straightforward: listen carefully, communicate clearly and help customers understand their next steps.</p><Link to="/contact" className="text-link">Get in touch <ArrowRight size={16}/></Link></div></section><section className="values-section"><div className="container values-grid">{[['01','Customer first','Helpful, respectful communication at every step.'],['02','Practical solutions','Clear information to help you make decisions.'],['03','Connected services','Different service areas, accessible from one website.']].map(v=><article className="value-card" key={v[0]}><span>{v[0]}</span><h3>{v[1]}</h3><p>{v[2]}</p></article>)}</div></section></Layout>;
+  return <Layout><PageHero eyebrow="About Rex Groups" title={<>Built around people.<br/><em>Ready for what’s next.</em></>} image="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1800&q=85" description="A multi-service group bringing logistics, hospitality and vacation enquiries together in one place."/><section className="section container about-grid"><div><p className="eyebrow">Who we are</p><h2>One place to start<br/><em>your next journey.</em></h2></div><div className="about-copy"><p>Rex Groups brings together three everyday needs: moving items, arranging places to stay and eat, and planning time away. We want it to be simple for customers to find the right service and get in touch with a real person.</p><p>Our approach is straightforward: listen carefully, communicate clearly and help customers understand their next steps.</p><Link to="/contact" className="text-link">Get in touch <ArrowRight size={16}/></Link></div></section><section className="values-section"><div className="container values-grid">{[['01','Customer first','Helpful, respectful communication at every step.'],['02','Practical solutions','Clear information to help you make decisions.'],['03','Connected services','Different service areas, accessible from one website.']].map(v=><article className="value-card reveal" key={v[0]}><span>{v[0]}</span><h3>{v[1]}</h3><p>{v[2]}</p></article>)}</div></section></Layout>;
 }
 
 function Contact() {
-  const [form, setForm] = useState({name:'',email:'',service:'Logistics',message:''});
+  const [params] = useSearchParams();
+  const options = ['Logistics', 'Hotel & Restaurant', 'Vacations', 'Other enquiry'];
+  const wanted = params.get('service');
+  const [form, setForm] = useState({name:'',email:'',service: options.includes(wanted) ? wanted : 'Logistics',message:''});
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   async function submit(e) {
@@ -180,7 +224,7 @@ function Contact() {
     }
     setBusy(false);
   }
-  return <Layout><PageHero eyebrow="Contact us" title={<>Let’s get the<br/><em>conversation started.</em></>} image="https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1800&q=85" description="Have a question or a plan in mind? Send us a message and tell us how we can help."/><section className="section container contact-layout"><div className="contact-info"><p className="eyebrow">Get in touch</p><h2>We’re happy<br/><em>to hear from you.</em></h2><p>Choose the easiest way to reach Rex Groups. For urgent questions, call or message us directly.</p><a className="contact-method" href={`mailto:${contact.email}`}><span><Mail/></span><div><small>Email us</small><b>{contact.email}</b></div><ArrowUpRight/></a><a className="contact-method" href={`tel:${contact.phone}`}><span><Phone/></span><div><small>Call us</small><b>{contact.phone}</b></div><ArrowUpRight/></a><a className="contact-method" href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer"><span><Send/></span><div><small>WhatsApp</small><b>Chat with our team</b></div><ArrowUpRight/></a><div className="response-note"><Clock3 size={18}/><span>Send us your enquiry and we’ll follow up as soon as we can.</span></div></div><form className="form-card" onSubmit={submit}><p className="eyebrow">Send a message</p><h3>How can we help?</h3><label>Your name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Full name"/></label><label>Email address<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label><label>Service you’re interested in<select value={form.service} onChange={e=>setForm({...form,service:e.target.value})}><option>Logistics</option><option>Hotel & Restaurant</option><option>Vacations</option><option>Other enquiry</option></select></label><label>Message<textarea required rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form.</small></form></section></Layout>;
+  return <Layout><PageHero eyebrow="Contact us" title={<>Let’s get the<br/><em>conversation started.</em></>} image="https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1800&q=85" description="Have a question or a plan in mind? Send us a message and tell us how we can help."/><section className="section container contact-layout"><div className="contact-info"><p className="eyebrow">Get in touch</p><h2>We’re happy<br/><em>to hear from you.</em></h2><p>Choose the easiest way to reach Rex Groups. For urgent questions, call or message us directly.</p><a className="contact-method" href={`mailto:${contact.email}`}><span><Mail/></span><div><small>Email us</small><b>{contact.email}</b></div><ArrowUpRight/></a><a className="contact-method" href={`tel:${contact.phone}`}><span><Phone/></span><div><small>Call us</small><b>{contact.phone}</b></div><ArrowUpRight/></a><a className="contact-method" href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer"><span><Send/></span><div><small>WhatsApp</small><b>Chat with our team</b></div><ArrowUpRight/></a><div className="response-note"><Clock3 size={18}/><span>Send us your enquiry and we’ll follow up as soon as we can.</span></div></div><form className="form-card" onSubmit={submit}><p className="eyebrow">Send a message</p><h3>How can we help?</h3><label>Your name<input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Full name"/></label><label>Email address<input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label><label>Service you’re interested in<select value={form.service} onChange={e=>setForm({...form,service:e.target.value})}><option>Logistics</option><option>Hotel & Restaurant</option><option>Vacations</option><option>Other enquiry</option></select></label><label>Message<textarea required rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form.</small></form></section><section className="section container faq-section"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Before you<br/><em>send a message.</em></h2></div></div><FAQ/></section></Layout>;
 }
 
 function AuthPage({ mode }) {
@@ -202,7 +246,7 @@ function AuthPage({ mode }) {
       : await supabase.auth.signInWithPassword({email:form.email.trim(),password:form.password});
     setBusy(false);
     if (result.error) setStatus(result.error.message);
-        else if (signup && result.data.user?.identities?.length === 0) setStatus('This email is already registered. Please sign in instead.');
+    else if (signup && result.data.user?.identities?.length === 0) setStatus('This email is already registered. Please sign in instead.');
     else if (signup && !result.data.session) setStatus('Account created. Check your email to confirm it, then log in.');
     else navigate('/dashboard');
   }
@@ -272,7 +316,7 @@ function Dashboard() {
       window.dispatchEvent(new Event('profile-updated'));
       setNotice('Profile picture updated.');
     } catch (err) {
-                  console.error(err);
+      console.error(err);
       setError('Upload failed: ' + (err?.message || 'unknown error'));
     } finally { setUploading(false); }
   }
