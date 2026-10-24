@@ -20,6 +20,7 @@ alter table public.profiles enable row level security;
 alter table public.enquiries enable row level security;
 
 -- Each signed-in user may read only their own profile.
+drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile" on public.profiles
 for select to authenticated using (auth.uid() = id);
 
@@ -40,6 +41,7 @@ after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
 -- Anyone can submit an enquiry; only admins can read enquiries.
+drop policy if exists "Anyone can submit enquiries" on public.enquiries;
 create policy "Anyone can submit enquiries" on public.enquiries
 for insert to anon, authenticated
 with check (
@@ -49,6 +51,7 @@ with check (
   length(trim(message)) between 1 and 5000
 );
 
+drop policy if exists "Admins can read enquiries" on public.enquiries;
 create policy "Admins can read enquiries" on public.enquiries
 for select to authenticated
 using (exists (
@@ -61,3 +64,54 @@ using (exists (
 -- set is_admin = true
 -- where id = (select id from auth.users where email = 'rexgroups.uk@gmail.com');
 -- IMPORTANT: do not enable admin access for anyone you do not trust.
+
+
+-- =====================================================================
+-- Profile names + profile pictures  (safe to run more than once)
+-- =====================================================================
+
+alter table public.profiles add column if not exists avatar_url text;
+
+-- Create profile rows for any accounts made before the sign-up trigger existed.
+insert into public.profiles (id, full_name)
+select u.id, coalesce(u.raw_user_meta_data ->> 'full_name', '')
+from auth.users u
+on conflict (id) do nothing;
+
+-- Signed-in users may change ONLY their own name and picture, never is_admin.
+revoke update on public.profiles from anon, authenticated;
+grant update (full_name, avatar_url) on public.profiles to authenticated;
+
+drop policy if exists "Users can update own profile" on public.profiles;
+create policy "Users can update own profile" on public.profiles
+  for update to authenticated
+  using (auth.uid() = id) with check (auth.uid() = id);
+
+-- Storage bucket for pictures (public read, 2 MB max, images only).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 2097152, array['image/jpeg','image/png','image/webp'])
+on conflict (id) do update
+  set public = true,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+-- Each user can only write inside their own folder (named after their user id).
+drop policy if exists "Avatar images are public" on storage.objects;
+create policy "Avatar images are public" on storage.objects
+  for select using (bucket_id = 'avatars');
+
+drop policy if exists "Users upload own avatar" on storage.objects;
+create policy "Users upload own avatar" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Users update own avatar" on storage.objects;
+create policy "Users update own avatar" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "Users delete own avatar" on storage.objects;
+create policy "Users delete own avatar" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
