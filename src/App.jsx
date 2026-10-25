@@ -234,6 +234,7 @@ function formatDetails(details) {
 }
 
 function Contact() {
+  const { session } = useAuth();
   const [params] = useSearchParams();
   const options = ['Logistics', 'Hotel & Restaurant', 'Vacations', 'Other enquiry'];
   const wanted = params.get('service');
@@ -270,9 +271,9 @@ function Contact() {
     const details = buildDetails();
     const message = form.message.trim() || (isBooking ? 'No additional message.' : '');
     if (supabase) {
-      const { error } = await supabase.from('enquiries').insert([{name:form.name.trim(),email:form.email.trim(),service:form.service,message,details}]);
+      const { error } = await supabase.from('enquiries').insert([{name:form.name.trim(),email:form.email.trim(),service:form.service,message,details,user_id:session?.user?.id ?? null}]);
       if (error) setStatus('We could not save this enquiry. Please use email or WhatsApp instead.');
-      else { setStatus('Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); setD(emptyDetails); }
+      else { setStatus(session ? 'Thanks! Your enquiry has been sent. You can follow its status in your account.' : 'Thanks! Your enquiry has been sent to our team.'); setForm({name:'',email:'',service:'Logistics',message:''}); setD(emptyDetails); }
     } else {
       const subject = encodeURIComponent(`Rex Groups enquiry: ${form.service}`);
       const extra = details ? `\nDetails: ${formatDetails(details)}` : '';
@@ -354,7 +355,6 @@ function AuthPage({ mode }) {
 
 function Dashboard() {
   const { session, profile, ready } = useAuth();
-  const [enquiries,setEnquiries] = useState([]);
   const [error,setError] = useState('');
   const [notice,setNotice] = useState('');
   const [uploading,setUploading] = useState(false);
@@ -365,14 +365,6 @@ function Dashboard() {
   const needsName = Boolean(profile) && !profile.full_name?.trim();
 
   useEffect(() => { if (supabase && ready && !session) navigate('/login'); }, [ready, session, navigate]);
-
-  useEffect(() => {
-    if (!supabase || !profile?.is_admin) return;
-    supabase.from('enquiries').select('*').order('created_at',{ascending:false}).limit(50).then(({data, error:e}) => {
-      if (e) setError('Admin access is configured, but enquiries could not be loaded. Check the database policies.');
-      else setEnquiries(data || []);
-    });
-  }, [profile?.is_admin]);
 
   async function logout() { if (supabase) await supabase.auth.signOut(); navigate('/'); }
 
@@ -433,7 +425,8 @@ function Dashboard() {
       <label>Please add your full name to continue<input required maxLength="120" autoComplete="name" value={nameDraft} onChange={e=>setNameDraft(e.target.value)} placeholder="Your full name"/></label>
       <button className="button">Save name</button>
     </form>}
-    {profile?.is_admin ? <><h2>Admin dashboard</h2><p className="muted">Recent customer enquiries (latest 50).</p><div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Received</th></tr></thead><tbody>{enquiries.map(row=><tr key={row.id}><td>{row.name}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td>{new Date(row.created_at).toLocaleDateString()}</td></tr>)}</tbody></table>{!enquiries.length&&<p className="muted table-empty">No enquiries yet.</p>}</div><AdminShipments/><AdminReviews/><AdminGallery/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
+    <MyEnquiries userId={session.user.id}/>
+    {profile?.is_admin ? <><AdminEnquiries/><AdminShipments/><AdminReviews/><AdminGallery/></> : <div className="notice-card"><CheckCircle2/><h2>You’re signed in</h2><p>Your account is ready. Contact our team for service enquiries. Admin tools are only available to accounts explicitly marked as administrators in the database.</p><Link className="button" to="/contact">Make an enquiry</Link></div>}
   </section></Layout>;
 }
 
@@ -775,6 +768,75 @@ function AdminGallery() {
       <div className="ship-actions"><button type="button" className="button" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Uploading…' : 'Choose a photo'} <Camera size={16}/></button><input ref={fileRef} type="file" accept="image/*" hidden onChange={upload}/></div>
     </div>
     <div className="admin-photos">{rows.map(ph => <figure key={ph.id}><img src={ph.url} alt={ph.caption || ''} loading="lazy"/><figcaption>{ph.caption || 'No caption'}</figcaption><button type="button" className="button button-small button-outline-dark" onClick={() => remove(ph)}><Trash2 size={14}/> Delete</button></figure>)}{!rows.length && <p className="muted table-empty">No photos yet.</p>}</div>
+  </div>;
+}
+
+const ENQ_LABELS = { new: 'Received', in_progress: 'In progress', done: 'Completed' };
+const enqBadge = st => st === 'done' ? 'status-badge done' : st === 'in_progress' ? 'status-badge hold' : 'status-badge';
+
+function MyEnquiries({ userId }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.from('enquiries').select('id,service,details,message,status,admin_note,created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(20)
+      .then(({ data, error }) => { if (active) setRows(error ? [] : data || []); });
+    return () => { active = false; };
+  }, [userId]);
+  if (rows === null) return null;
+  return <div className="my-enquiries">
+    <h2>My enquiries</h2>
+    {rows.length
+      ? <div className="mini-list">{rows.map(r => <article className="mini-item" key={r.id}>
+          <div><b>{r.service}</b> <span className={enqBadge(r.status)}>{ENQ_LABELS[r.status] || r.status}</span> <small> · {new Date(r.created_at).toLocaleDateString()}</small></div>
+          {r.details && <p className="muted">{formatDetails(r.details)}</p>}
+          <p>{r.message}</p>
+          {r.admin_note && <p className="team-note"><b>Message from Rex Groups:</b> {r.admin_note}</p>}
+        </article>)}</div>
+      : <p className="muted">Enquiries you send while signed in will appear here, so you can follow their progress. <Link to="/contact" className="text-link">Make an enquiry <ArrowRight size={14}/></Link></p>}
+  </div>;
+}
+
+function AdminEnquiries() {
+  const [rows, setRows] = useState([]);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [draft, setDraft] = useState({ status: 'in_progress', note: '' });
+
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.from('enquiries').select('*').order('created_at', { ascending: false }).limit(50);
+    if (error) setErr('Admin access is configured, but enquiries could not be loaded. Check the database policies.');
+    else setRows(data || []);
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(e) {
+    e.preventDefault(); setErr(''); setMsg(''); setBusy(true);
+    const { error } = await supabase.from('enquiries').update({ status: draft.status, admin_note: draft.note.trim() || null }).eq('id', editId);
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg('Enquiry updated.');
+    setEditId(null);
+    load();
+  }
+
+  const fresh = rows.filter(r => (r.status || 'new') === 'new').length;
+  const editing = rows.find(r => r.id === editId);
+  return <div>
+    <h2>Admin dashboard{fresh > 0 && <span className="count-pill">{fresh} new</span>}</h2>
+    <p className="muted">Recent customer enquiries (latest 50). Customers who were signed in can see the status and note you set.</p>
+    {msg && <p className="form-status form-ok"><CheckCircle2 size={16}/>{msg}</p>}
+    {err && <p className="form-status"><AlertCircle size={16}/>{err}</p>}
+    <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Status</th><th>Received</th><th></th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td>{row.name}{row.user_id && <small className="muted"> (account)</small>}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td><span className={enqBadge(row.status)}>{ENQ_LABELS[row.status] || row.status}</span></td><td>{new Date(row.created_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(row.id); setDraft({ status: row.status === 'new' ? 'in_progress' : row.status, note: row.admin_note || '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No enquiries yet.</p>}</div>
+    {editing && <form className="ship-form ship-update" onSubmit={save}>
+      <p className="eyebrow">Update enquiry from {editing.name}</p>
+      <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}>{Object.entries(ENQ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
+      <label className="wide">Note for the customer (optional)<input maxLength="300" value={draft.note} onChange={e => setDraft({ ...draft, note: e.target.value })} placeholder="e.g. We have called you to confirm the details."/></label>
+      {!editing.user_id && <p className="muted wide">This enquiry was sent without signing in, so the customer cannot see the status. Contact them by email, phone or WhatsApp.</p>}
+      <div className="ship-actions"><button className="button" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button><button type="button" className="button button-outline-dark" onClick={() => setEditId(null)}>Cancel</button></div>
+    </form>}
   </div>;
 }
 
