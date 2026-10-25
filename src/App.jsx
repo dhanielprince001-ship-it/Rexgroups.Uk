@@ -3,6 +3,7 @@ import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams
 import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package, Star, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
+import { privacy, terms } from './legal.js';
 
 const iconMap = { truck: Truck, hotel: Hotel, plane: Plane };
 
@@ -150,7 +151,7 @@ function Footer() {
       <div><h4>Our services</h4><Link to="/logistics">Logistics</Link><Link to="/hospitality">Hotel & Restaurant</Link><Link to="/vacations">Vacations</Link></div>
       <div><h4>Get in touch</h4><a href={`mailto:${contact.email}`}><Mail size={15}/>{contact.email}</a><a href={`tel:${contact.phone}`}><Phone size={15}/>{contact.phone}</a><a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noreferrer">WhatsApp support <ArrowUpRight size={14}/></a></div>
     </div>
-    <div className="container footer-bottom"><span>© {new Date().getFullYear()} Rex Groups. All rights reserved.</span><span>Built for every screen.</span></div>
+    <div className="container footer-bottom"><span>© {new Date().getFullYear()} Rex Groups. All rights reserved.</span><span><Link to="/privacy">Privacy Policy</Link> · <Link to="/terms">Terms of Service</Link></span></div>
   </footer>;
 }
 
@@ -303,7 +304,7 @@ function Contact() {
       <label>Children<input type="number" min="0" max="50" value={d.children} onChange={e=>setD({...d,children:e.target.value})}/></label>
       <label className="wide">Budget (optional)<input maxLength="80" value={d.budget} onChange={e=>setD({...d,budget:e.target.value})} placeholder="e.g. ₦500,000 or flexible"/></label>
     </fieldset>}
-    <label>{isBooking ? 'Anything else we should know? (optional)' : 'Message'}<textarea required={!isBooking} rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form.</small></form></section><section className="section container faq-section"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Before you<br/><em>send a message.</em></h2></div></div><FAQ/></section></Layout>;
+    <label>{isBooking ? 'Anything else we should know? (optional)' : 'Message'}<textarea required={!isBooking} rows="5" value={form.message} onChange={e=>setForm({...form,message:e.target.value})} placeholder="Tell us a little about what you need..."/></label>{status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}<button className="button form-submit" disabled={busy}>{busy?'Sending…':'Send enquiry'} <ArrowUpRight size={17}/></button><small className="form-footnote">Please do not include passwords or sensitive payment details in this form. See our <Link to="/privacy">Privacy Policy</Link>.</small></form></section><section className="section container faq-section"><div className="section-heading"><div><p className="eyebrow">Questions</p><h2>Before you<br/><em>send a message.</em></h2></div></div><FAQ/></section></Layout>;
 }
 
 function AuthPage({ mode }) {
@@ -348,6 +349,7 @@ function AuthPage({ mode }) {
         <button className="button form-submit" disabled={busy}>{busy?'Please wait…':signup?'Create account':'Login'} <ArrowUpRight size={17}/></button>
       </form>
       <p className="auth-switch">{signup?'Already have an account?':'New to Rex Groups?'} <Link to={signup?'/login':'/register'}>{signup?'Sign in':'Create an account'}</Link></p>
+      {signup && <small className="form-footnote">By creating an account you agree to our <Link to="/terms">Terms of Service</Link> and <Link to="/privacy">Privacy Policy</Link>.</small>}
       <small className="form-footnote">Use a unique password. Never share your password with anyone.</small>
     </>}
   </div></div></section></Layout>;
@@ -840,6 +842,21 @@ function AdminEnquiries() {
   </div>;
 }
 
+function LegalPage({ doc }) {
+  return <Layout>
+    <PageHero eyebrow="Legal" title={doc.title} image={services[0].image} description={`Last updated ${doc.updated}`}/>
+    <section className="section container legal">
+      <p className="legal-intro">{doc.intro}</p>
+      {doc.sections.map((sec, i) => <div key={sec.h}>
+        <h2>{i + 1}. {sec.h}</h2>
+        {sec.p && sec.p.map(t => <p key={t}>{t}</p>)}
+        {sec.ul && <ul>{sec.ul.map(t => <li key={t}>{t}</li>)}</ul>}
+        {sec.after && sec.after.map(t => <p key={t}>{t}</p>)}
+      </div>)}
+    </section>
+  </Layout>;
+}
+
 function NotFound() { return <Layout><section className="not-found container"><p className="eyebrow">404 · Page not found</p><h1>This page took<br/><em>a wrong turn.</em></h1><Link className="button" to="/">Back to home <ArrowRight size={16}/></Link></section></Layout>; }
 
 export default function App() {
@@ -853,6 +870,8 @@ export default function App() {
     <Route path="/track" element={<TrackPage/>}/>
     <Route path="/gallery" element={<GalleryPage/>}/>
     <Route path="/contact" element={<Contact/>}/>
+    <Route path="/privacy" element={<LegalPage doc={privacy}/>}/>
+    <Route path="/terms" element={<LegalPage doc={terms}/>}/>
     <Route path="/login" element={<AuthPage mode="login"/>}/>
     <Route path="/register" element={<AuthPage mode="register"/>}/>
     <Route path="/dashboard" element={<Dashboard/>}/>
