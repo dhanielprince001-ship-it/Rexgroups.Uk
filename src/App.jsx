@@ -345,6 +345,7 @@ function AuthPage({ mode }) {
         {signup && <label>Full name<input required maxLength="120" autoComplete="name" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Your full name"/></label>}
         <label>Email address<input type="email" required autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="you@example.com"/></label>
         <label>Password<input type="password" minLength="8" required autoComplete={signup?'new-password':'current-password'} value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="At least 8 characters"/></label>
+        {!signup && <p className="forgot-link"><Link to="/forgot-password">Forgot password?</Link></p>}
         {status && <p className="form-status"><AlertCircle size={16}/>{status}</p>}
         <button className="button form-submit" disabled={busy}>{busy?'Please wait…':signup?'Create account':'Login'} <ArrowUpRight size={17}/></button>
       </form>
@@ -842,6 +843,82 @@ function AdminEnquiries() {
   </div>;
 }
 
+function AuthShell({ children }) {
+  return <Layout><section className="auth-section"><div className="auth-picture"><img src="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=85" alt="Scenic travel destination"/><div><p className="eyebrow light-eyebrow">Rex Groups</p><h2>Your next step<br/><em>starts here.</em></h2><p>Manage your enquiries and stay connected with our services.</p></div></div><div className="auth-panel"><div className="auth-form-wrap">{children}</div></div></section></Layout>;
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState('');
+  const [state, setState] = useState({ busy: false, msg: '', ok: false });
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!supabase) { setState({ busy: false, msg: 'Accounts are not connected yet. Please contact our team.', ok: false }); return; }
+    setState({ busy: true, msg: '', ok: false });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/reset-password` });
+    if (error && /rate|limit|seconds/i.test(error.message)) setState({ busy: false, msg: 'Please wait a minute before asking for another email.', ok: false });
+    else if (error && error.status >= 500) setState({ busy: false, msg: 'We could not send the email right now. Please try again later or contact our team.', ok: false });
+    else setState({ busy: false, msg: 'If an account exists for that email, we have sent a link to reset your password. Please check your inbox and spam folder.', ok: true });
+  }
+
+  return <AuthShell>
+    <span className="icon-tile auth-icon"><UserRound/></span><p className="eyebrow">Account help</p><h1>Reset your password</h1><p className="muted">Enter your account email and we’ll send you a link to choose a new password.</p>
+    <form onSubmit={submit}>
+      <label>Email address<input type="email" required autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com"/></label>
+      {state.msg && <p className={state.ok ? 'form-status form-ok' : 'form-status'}>{state.ok ? <CheckCircle2 size={16}/> : <AlertCircle size={16}/>}{state.msg}</p>}
+      <button className="button form-submit" disabled={state.busy}>{state.busy ? 'Sending…' : 'Send reset link'} <ArrowUpRight size={17}/></button>
+    </form>
+    <p className="auth-switch"><Link to="/login">Back to sign in</Link></p>
+  </AuthShell>;
+}
+
+function ResetPasswordPage() {
+  const navigate = useNavigate();
+  const [phase, setPhase] = useState('checking');
+  const [pw, setPw] = useState({ a: '', b: '' });
+  const [state, setState] = useState({ busy: false, msg: '' });
+
+  useEffect(() => {
+    if (!supabase) { setPhase('invalid'); return; }
+    let active = true;
+    const found = () => { if (active) setPhase(p => (p === 'checking' ? 'form' : p)); };
+    supabase.auth.getSession().then(({ data }) => { if (data.session) found(); });
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (s && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN')) found();
+    });
+    const timer = setTimeout(() => { if (active) setPhase(p => (p === 'checking' ? 'invalid' : p)); }, 4000);
+    return () => { active = false; clearTimeout(timer); listener.subscription.unsubscribe(); };
+  }, []);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (pw.a.length < 8) { setState({ busy: false, msg: 'Your password must be at least 8 characters.' }); return; }
+    if (pw.a !== pw.b) { setState({ busy: false, msg: 'The two passwords do not match.' }); return; }
+    setState({ busy: true, msg: '' });
+    const { error } = await supabase.auth.updateUser({ password: pw.a });
+    if (error) { setState({ busy: false, msg: error.message }); return; }
+    setState({ busy: false, msg: '' });
+    setPhase('done');
+    setTimeout(() => navigate('/dashboard'), 1800);
+  }
+
+  return <AuthShell>
+    <span className="icon-tile auth-icon"><UserRound/></span><p className="eyebrow">Account help</p><h1>Choose a new password</h1>
+    {phase === 'checking' && <p className="muted">Checking your reset link…</p>}
+    {phase === 'invalid' && <>
+      <p className="form-status"><AlertCircle size={16}/>This reset link is invalid or has expired. Please request a new one.</p>
+      <Link className="button form-submit" to="/forgot-password">Request a new link <ArrowUpRight size={17}/></Link>
+    </>}
+    {phase === 'form' && <form onSubmit={submit}>
+      <label>New password<input type="password" required minLength="8" autoComplete="new-password" value={pw.a} onChange={e => setPw({ ...pw, a: e.target.value })} placeholder="At least 8 characters"/></label>
+      <label>Confirm new password<input type="password" required minLength="8" autoComplete="new-password" value={pw.b} onChange={e => setPw({ ...pw, b: e.target.value })} placeholder="Type it again"/></label>
+      {state.msg && <p className="form-status"><AlertCircle size={16}/>{state.msg}</p>}
+      <button className="button form-submit" disabled={state.busy}>{state.busy ? 'Saving…' : 'Save new password'} <ArrowUpRight size={17}/></button>
+    </form>}
+    {phase === 'done' && <p className="form-status form-ok"><CheckCircle2 size={16}/>Your password has been changed. Taking you to your account…</p>}
+  </AuthShell>;
+}
+
 function LegalPage({ doc }) {
   return <Layout>
     <PageHero eyebrow="Legal" title={doc.title} image={services[0].image} description={`Last updated ${doc.updated}`}/>
@@ -874,6 +951,8 @@ export default function App() {
     <Route path="/terms" element={<LegalPage doc={terms}/>}/>
     <Route path="/login" element={<AuthPage mode="login"/>}/>
     <Route path="/register" element={<AuthPage mode="register"/>}/>
+    <Route path="/forgot-password" element={<ForgotPasswordPage/>}/>
+    <Route path="/reset-password" element={<ResetPasswordPage/>}/>
     <Route path="/dashboard" element={<Dashboard/>}/>
     <Route path="*" element={<NotFound/>}/>
   </Routes>;
