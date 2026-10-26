@@ -169,3 +169,11 @@ main{animation:pageIn .45s ease}
 .forgot-link{margin:-6px 0 16px;text-align:right;font-size:13px}
 .forgot-link a{color:var(--blue);font-weight:600}
 .forgot-link a:hover{text-decoration:underline}
+
+/* admin search + export */
+.admin-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0 0}
+.admin-tools input,.admin-tools select{border:1px solid #dce3eb;border-radius:5px;padding:11px 13px;font-size:13px;color:var(--navy);background:#fff;outline:none;min-width:0}
+.admin-tools input{flex:1;min-width:200px}
+.admin-tools input:focus,.admin-tools select:focus{border-color:var(--blue);box-shadow:0 0 0 3px #1666b418}
+.admin-tools .button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.admin-count{font-size:12px;color:var(--muted);margin:10px 0 0}
