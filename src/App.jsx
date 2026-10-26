@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package, Star, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Menu, X, Truck, Hotel, Plane, ArrowUpRight, ArrowRight, Phone, Mail, MapPin, ShieldCheck, Clock3, CreditCard, UserRound, LogOut, LayoutDashboard, Send, CheckCircle2, AlertCircle, Camera, ChevronDown, ArrowUp, MessageCircle, ClipboardList, PhoneCall, ThumbsUp, Search, Package, Star, ChevronLeft, ChevronRight, Trash2, Download } from 'lucide-react';
 import { contact, services } from './data.js';
 import { supabase, backendReady } from './lib/supabase.js';
 import { privacy, terms } from './legal.js';
@@ -514,9 +514,11 @@ function AdminShipments() {
   const [form, setForm] = useState({ origin: '', destination: '', receiver: '', description: '' });
   const [editId, setEditId] = useState(null);
   const [upd, setUpd] = useState({ status: 'In transit', location: '', note: '' });
+  const [q, setQ] = useState('');
+  const [stFilter, setStFilter] = useState('all');
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false }).limit(50);
+    const { data, error } = await supabase.from('shipments').select('*').order('created_at', { ascending: false }).limit(300);
     if (error) setErr('Could not load shipments. Check that the package tracking SQL has been run in Supabase.');
     else setRows(data || []);
   }, []);
@@ -542,6 +544,18 @@ function AdminShipments() {
     load();
   }
 
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter(r =>
+    (stFilter === 'all' || r.status === stFilter) &&
+    (!needle || [r.tracking_code, r.origin, r.destination, r.receiver_name, r.description].join(' ').toLowerCase().includes(needle))
+  );
+
+  function exportCsv() {
+    downloadCsv('rex-shipments.csv',
+      ['Tracking code', 'Origin', 'Destination', 'Receiver (private)', 'Internal notes', 'Status', 'Created', 'Last updated'],
+      shown.map(r => [r.tracking_code, r.origin, r.destination, r.receiver_name, r.description, r.status, new Date(r.created_at).toLocaleString(), new Date(r.updated_at).toLocaleString()]));
+  }
+
   return <div className="admin-ship">
     <h2>Package tracking</h2>
     <p className="muted">Register a shipment, then share its tracking code with the customer. The receiver name and internal notes are never shown publicly.</p>
@@ -554,7 +568,13 @@ function AdminShipments() {
       <label>Internal notes (private)<input maxLength="200" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Optional"/></label>
       <button className="button" disabled={busy}>{busy ? 'Saving…' : 'Create shipment'} <ArrowUpRight size={17}/></button>
     </form>
-    <div className="table-wrap"><table><thead><tr><th>Code</th><th>Route</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>{rows.map(r => <tr key={r.id}><td><b>{r.tracking_code}</b></td><td>{r.origin} → {r.destination}</td><td>{r.status}</td><td>{new Date(r.updated_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(r.id); setUpd({ status: r.status, location: '', note: '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No shipments yet.</p>}</div>
+    <div className="admin-tools">
+      <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search code, place or receiver" aria-label="Search shipments"/>
+      <select value={stFilter} onChange={e => setStFilter(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option>{STATUSES.map(st => <option key={st}>{st}</option>)}</select>
+      <button type="button" className="button button-small button-outline-dark" onClick={exportCsv} disabled={!shown.length}><Download size={14}/> Export CSV</button>
+    </div>
+    <p className="admin-count">Showing {shown.length} of {rows.length} shipments</p>
+    <div className="table-wrap"><table><thead><tr><th>Code</th><th>Route</th><th>Status</th><th>Updated</th><th></th></tr></thead><tbody>{shown.map(r => <tr key={r.id}><td><b>{r.tracking_code}</b></td><td>{r.origin} → {r.destination}</td><td>{r.status}</td><td>{new Date(r.updated_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(r.id); setUpd({ status: r.status, location: '', note: '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No shipments yet.</p>}{rows.length > 0 && !shown.length && <p className="muted table-empty">No shipments match your search.</p>}</div>
     {editId && <form className="ship-form ship-update" onSubmit={addEvent}>
       <p className="eyebrow">Update {rows.find(r => r.id === editId)?.tracking_code}</p>
       <label>New status<select value={upd.status} onChange={e => setUpd({ ...upd, status: e.target.value })}>{STATUSES.map(st => <option key={st}>{st}</option>)}</select></label>
@@ -774,6 +794,23 @@ function AdminGallery() {
   </div>;
 }
 
+// Turns a table into a spreadsheet file (CSV). Cells that start with = + - @ are made safe for Excel.
+function csvCell(v) {
+  let t = v == null ? '' : String(v);
+  if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+
+function downloadCsv(filename, header, rows) {
+  const lines = [header, ...rows].map(r => r.map(csvCell).join(','));
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
 const ENQ_LABELS = { new: 'Received', in_progress: 'In progress', done: 'Completed' };
 const enqBadge = st => st === 'done' ? 'status-badge done' : st === 'in_progress' ? 'status-badge hold' : 'status-badge';
 
@@ -807,9 +844,12 @@ function AdminEnquiries() {
   const [busy, setBusy] = useState(false);
   const [editId, setEditId] = useState(null);
   const [draft, setDraft] = useState({ status: 'in_progress', note: '' });
+  const [q, setQ] = useState('');
+  const [stFilter, setStFilter] = useState('all');
+  const [svcFilter, setSvcFilter] = useState('all');
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from('enquiries').select('*').order('created_at', { ascending: false }).limit(50);
+    const { data, error } = await supabase.from('enquiries').select('*').order('created_at', { ascending: false }).limit(300);
     if (error) setErr('Admin access is configured, but enquiries could not be loaded. Check the database policies.');
     else setRows(data || []);
   }, []);
@@ -825,14 +865,34 @@ function AdminEnquiries() {
     load();
   }
 
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter(r =>
+    (stFilter === 'all' || (r.status || 'new') === stFilter) &&
+    (svcFilter === 'all' || r.service === svcFilter) &&
+    (!needle || [r.name, r.email, r.service, r.message, formatDetails(r.details)].join(' ').toLowerCase().includes(needle))
+  );
+
+  function exportCsv() {
+    downloadCsv('rex-enquiries.csv',
+      ['Received', 'Name', 'Email', 'Service', 'Details', 'Message', 'Status', 'Note to customer', 'Has account'],
+      shown.map(r => [new Date(r.created_at).toLocaleString(), r.name, r.email, r.service, formatDetails(r.details), r.message, ENQ_LABELS[r.status] || r.status, r.admin_note, r.user_id ? 'Yes' : 'No']));
+  }
+
   const fresh = rows.filter(r => (r.status || 'new') === 'new').length;
   const editing = rows.find(r => r.id === editId);
   return <div>
     <h2>Admin dashboard{fresh > 0 && <span className="count-pill">{fresh} new</span>}</h2>
-    <p className="muted">Recent customer enquiries (latest 50). Customers who were signed in can see the status and note you set.</p>
+    <p className="muted">Customer enquiries (latest 300). Customers who were signed in can see the status and note you set.</p>
     {msg && <p className="form-status form-ok"><CheckCircle2 size={16}/>{msg}</p>}
     {err && <p className="form-status"><AlertCircle size={16}/>{err}</p>}
-    <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Status</th><th>Received</th><th></th></tr></thead><tbody>{rows.map(row => <tr key={row.id}><td>{row.name}{row.user_id && <small className="muted"> (account)</small>}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td><span className={enqBadge(row.status)}>{ENQ_LABELS[row.status] || row.status}</span></td><td>{new Date(row.created_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(row.id); setDraft({ status: row.status === 'new' ? 'in_progress' : row.status, note: row.admin_note || '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No enquiries yet.</p>}</div>
+    <div className="admin-tools">
+      <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email or message" aria-label="Search enquiries"/>
+      <select value={stFilter} onChange={e => setStFilter(e.target.value)} aria-label="Filter by status"><option value="all">All statuses</option>{Object.entries(ENQ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+      <select value={svcFilter} onChange={e => setSvcFilter(e.target.value)} aria-label="Filter by service"><option value="all">All services</option><option>Logistics</option><option>Hotel & Restaurant</option><option>Vacations</option><option>Other enquiry</option></select>
+      <button type="button" className="button button-small button-outline-dark" onClick={exportCsv} disabled={!shown.length}><Download size={14}/> Export CSV</button>
+    </div>
+    <p className="admin-count">Showing {shown.length} of {rows.length} enquiries</p>
+    <div className="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Service</th><th>Details</th><th>Message</th><th>Status</th><th>Received</th><th></th></tr></thead><tbody>{shown.map(row => <tr key={row.id}><td>{row.name}{row.user_id && <small className="muted"> (account)</small>}</td><td>{row.email}</td><td>{row.service}</td><td>{formatDetails(row.details)}</td><td>{row.message}</td><td><span className={enqBadge(row.status)}>{ENQ_LABELS[row.status] || row.status}</span></td><td>{new Date(row.created_at).toLocaleDateString()}</td><td><button type="button" className="button button-small" onClick={() => { setEditId(row.id); setDraft({ status: row.status === 'new' ? 'in_progress' : row.status, note: row.admin_note || '' }); }}>Update</button></td></tr>)}</tbody></table>{!rows.length && <p className="muted table-empty">No enquiries yet.</p>}{rows.length > 0 && !shown.length && <p className="muted table-empty">No enquiries match your search.</p>}</div>
     {editing && <form className="ship-form ship-update" onSubmit={save}>
       <p className="eyebrow">Update enquiry from {editing.name}</p>
       <label>Status<select value={draft.status} onChange={e => setDraft({ ...draft, status: e.target.value })}>{Object.entries(ENQ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
